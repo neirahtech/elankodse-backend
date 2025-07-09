@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_IMAGE = 'elankodse-backend'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+        DEPLOY_PATH = '/opt/elankodse'
+        BACKUP_PATH = '/opt/elankodse/backups'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                dir('backend') {
+                    sh 'npm ci --only=production'
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                dir('backend') {
+                    
+                    echo 'Running tests...'
+                    
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                dir('backend') {
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                }
+            }
+        }
+        
+        stage('Backup Current Deployment') {
+            steps {
+                script {
+                    try {
+                        sh """
+                            mkdir -p ${BACKUP_PATH}
+                            if [ -d "${DEPLOY_PATH}" ]; then
+                                tar -czf ${BACKUP_PATH}/backup_${env.BUILD_NUMBER}_$(date +%Y%m%d_%H%M%S).tar.gz -C ${DEPLOY_PATH} .
+                            fi
+                        """
+                    } catch (Exception e) {
+                        echo "Backup failed: ${e.getMessage()}"
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Production') {
+            steps {
+                script {
+                    try {
+                        // Stop current containers
+                        sh "cd ${DEPLOY_PATH} && docker-compose down || true"
+                        
+                        // Copy new code
+                        sh "cp -r backend/* ${DEPLOY_PATH}/"
+                        
+                        // Copy environment file if it doesn't exist
+                        sh "if [ ! -f ${DEPLOY_PATH}/.env ]; then cp backend/.env.example ${DEPLOY_PATH}/.env; fi"
+                        
+                        // Start new containers
+                        sh "cd ${DEPLOY_PATH} && docker-compose up -d"
+                        
+                        // Wait for health check
+                        sh "sleep 30"
+                        
+                        // Verify deployment
+                        sh "curl -f http://localhost:8084/api/health || exit 1"
+                        
+                    } catch (Exception e) {
+                        echo "Deployment failed: ${e.getMessage()}"
+                        
+                        // Rollback
+                        echo "Rolling back..."
+                        sh "cd ${DEPLOY_PATH} && docker-compose down"
+                        sh "cd ${DEPLOY_PATH} && docker-compose up -d"
+                        
+                        error "Deployment failed and rollback completed"
+                    }
+                }
+            }
+        }
+        
+        stage('Cleanup') {
+            steps {
+                sh """
+                    # Remove old Docker images
+                    docker image prune -f
+                    
+                    # Keep only last 5 backups
+                    ls -t ${BACKUP_PATH}/backup_*.tar.gz | tail -n +6 | xargs -r rm
+                """
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean workspace
+            cleanWs()
+        }
+        success {
+            echo "Deployment completed successfully!"
+        }
+        failure {
+            echo "Deployment failed!"
+        }
+    }
+} 

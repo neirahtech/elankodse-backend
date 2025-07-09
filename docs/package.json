@@ -1,0 +1,49 @@
+{
+  "name": "elankodse-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Elankodse platform",
+  "main": "backend/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "build": "cd backend && npm run build",
+    "test": "cd backend && npm test",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "setup": "cd backend && npm install",
+    "lint": "cd backend && npm run lint",
+    "format": "cd backend && npm run format"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "api",
+    "backend",
+    "docker",
+    "jenkins",
+    "aws"
+  ],
+  "author": "Elankodse Team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neirahtech/elankodse-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/neirahtech/elankodse-backend.git"
+  },
+  "homepage": "https://github.com/neirahtech/elankodse-backend#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "workspaces": [
+    "backend"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+} 
