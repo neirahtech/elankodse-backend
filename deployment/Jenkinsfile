@@ -49,7 +49,7 @@ pipeline {
                         sh """
                             mkdir -p ${BACKUP_PATH}
                             if [ -d "${DEPLOY_PATH}" ]; then
-                                tar -czf ${BACKUP_PATH}/backup_${env.BUILD_NUMBER}_$(date +%Y%m%d_%H%M%S).tar.gz -C ${DEPLOY_PATH} .
+                                tar -czf ${BACKUP_PATH}/backup_${env.BUILD_NUMBER}_\$(date +%Y%m%d_%H%M%S).tar.gz -C ${DEPLOY_PATH} .
                             fi
                         """
                     } catch (Exception e) {
