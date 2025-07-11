@@ -16,6 +16,9 @@ pipeline {
         }
         
         stage('Install Dependencies') {
+            agent {
+                docker { image 'node:18' }
+            }
             steps {
                 dir('backend') {
                     sh 'npm ci --only=production'
