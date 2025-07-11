@@ -17,10 +17,14 @@ pipeline {
         
         stage('Install Dependencies') {
             agent {
-                docker { image 'node:18' }
+                docker {
+                    image 'node:18'
+                    args '-e HOME=/tmp'
+                }
             }
             steps {
                 dir('backend') {
+                    sh 'rm -rf node_modules'
                     sh 'npm ci --only=production'
                 }
             }
