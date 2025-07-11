@@ -16,7 +16,7 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - PRODUCTION_URL=${PRODUCTION_URL}
     volumes:
-      - ./backend/logs:/app/logs
+      - ./logs:/app/logs
     networks:
       - elankodse-network
     healthcheck:
@@ -34,9 +34,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./backend/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./backend/ssl:/etc/nginx/ssl:ro
-      - ./backend/logs/nginx:/var/log/nginx
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /opt/elankodse/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
     depends_on:
       - backend
     networks:
