@@ -1,15 +1,51 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
 
-const UserSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  avatar: { type: String },
-  role: { type: String, default: 'user' },
-  isAuthor: { type: Boolean, default: false },
-  library: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
-}, { timestamps: true });
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    autoIncrement: true,
+    primaryKey: true,
+  },
+  firstName: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  lastName: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  avatar: {
+    type: DataTypes.STRING,
+  },
+  bio: {
+    type: DataTypes.TEXT,
+  },
+  location: {
+    type: DataTypes.STRING,
+  },
+  website: {
+    type: DataTypes.STRING,
+  },
+  role: {
+    type: DataTypes.STRING,
+    defaultValue: 'user',
+  },
+  isAuthor: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  }
+}, {
+  timestamps: true,
+});
 
-const User = mongoose.model('User', UserSchema);
 export default User; 

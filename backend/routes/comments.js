@@ -14,20 +14,65 @@ const commentLimiter = rateLimit({
   keyGenerator: (req) => req.user ? req.user.id : req.ip
 });
 
+// Helper function to find post by postId or numeric id
+async function findPostByIdentifier(identifier) {
+  // Try to find by postId first
+  let post = await Post.findOne({ where: { postId: identifier } });
+  
+  if (!post) {
+    // If not found by postId, try by numeric id
+    const numericId = parseInt(identifier);
+    if (!isNaN(numericId)) {
+      post = await Post.findByPk(numericId);
+    }
+  }
+  
+  return post;
+}
+
 // Get comments for a post
 router.get('/:postId', async (req, res) => {
   try {
-    // Find the post by postId
-    const post = await Post.findOne({ postId: req.params.postId });
+    // Find the post by postId or numeric id
+    const post = await findPostByIdentifier(req.params.postId);
     if (!post) {
       return res.status(404).json({ error: 'Post not found' });
     }
     
-    const comments = await Comment.find({ post: post._id })
-      .populate('user', 'firstName lastName avatar')
-      .sort({ createdAt: -1 });
+    const comments = await Comment.findAll({
+      where: { postId: post.id },
+      order: [['createdAt', 'DESC']]
+    });
     
-    res.json(comments);
+    // Transform comments to include user information
+    const transformedComments = comments.map(comment => {
+      const commentData = comment.toJSON();
+      
+      // If comment has userId, include user info from User model
+      if (commentData.userId) {
+        // This will be populated by the include if we add it back
+        return {
+          ...commentData,
+          user: {
+            firstName: commentData.userFirstName || 'Anonymous',
+            lastName: commentData.userLastName || '',
+            avatar: commentData.userAvatar || '/avatar1.jpg'
+          }
+        };
+      } else {
+        // Anonymous comment
+        return {
+          ...commentData,
+          user: {
+            firstName: commentData.userFirstName || 'Anonymous',
+            lastName: commentData.userLastName || '',
+            avatar: commentData.userAvatar || '/avatar1.jpg'
+          }
+        };
+      }
+    });
+    
+    res.json(transformedComments);
   } catch (error) {
     console.error('Error fetching comments:', error);
     res.status(500).json({ error: 'Failed to fetch comments' });
@@ -35,69 +80,135 @@ router.get('/:postId', async (req, res) => {
 });
 
 // Add a comment to a post
-router.post('/:postId', auth, commentLimiter, async (req, res) => {
+router.post('/:postId', commentLimiter, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, user } = req.body;
     
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Comment text is required' });
     }
     
-    // Find the post by postId
-    const post = await Post.findOne({ postId: req.params.postId });
+    // Find the post by postId or numeric id
+    const post = await findPostByIdentifier(req.params.postId);
+    
     if (!post) {
       return res.status(404).json({ error: 'Post not found' });
     }
     
-    const comment = await Comment.create({
-      post: post._id,
-      user: req.user.id,
-      text: text.trim()
-    });
+    // Handle user information (authenticated or anonymous)
+    const userId = req.user ? req.user.id : null;
+    const userFirstName = user?.firstName || 'Anonymous';
+    const userLastName = user?.lastName || '';
+    const userAvatar = user?.avatar || '/avatar1.jpg';
+    const anonymousId = req.user ? null : req.ip; // Use IP for anonymous users
     
-    // Populate user info for the response
-    await comment.populate('user', 'firstName lastName avatar');
+    const comment = await Comment.create({
+      postId: post.id,
+      userId: userId,
+      text: text.trim(),
+      userFirstName: userFirstName,
+      userLastName: userLastName,
+      userAvatar: userAvatar,
+      anonymousId: anonymousId
+    });
     
     // Update post comment count
     post.comments = (post.comments || 0) + 1;
     await post.save();
     
-    res.status(201).json(comment);
+    // Prepare response with user info
+    const commentResponse = {
+      ...comment.toJSON(),
+      user: {
+        firstName: userFirstName,
+        lastName: userLastName,
+        avatar: userAvatar
+      }
+    };
+    
+    res.status(201).json(commentResponse);
   } catch (error) {
     console.error('Error adding comment:', error);
     res.status(500).json({ error: 'Failed to add comment' });
   }
 });
 
+// Debug endpoint to check user authentication
+router.get('/debug/auth', auth, (req, res) => {
+  res.json({
+    message: 'Authentication working',
+    user: req.user,
+    userId: req.user.id,
+    email: req.user.email,
+    isAuthor: req.user.isAuthor
+  });
+});
+
 // Delete a comment
 router.delete('/:commentId', auth, async (req, res) => {
   try {
-    const comment = await Comment.findById(req.params.commentId)
-      .populate('user', 'firstName lastName')
-      .populate('post', 'author');
+    console.log('Attempting to delete comment:', req.params.commentId, 'by user:', req.user.id);
     
+    const comment = await Comment.findByPk(req.params.commentId);
     if (!comment) {
+      console.log('Comment not found');
       return res.status(404).json({ error: 'Comment not found' });
     }
     
+    console.log('Comment found:', {
+      id: comment.id,
+      userId: comment.userId,
+      postId: comment.postId,
+      text: comment.text?.substring(0, 50) + '...'
+    });
+    
+    // Get the post to check if user is the post author
+    const post = await Post.findByPk(comment.postId);
+    if (!post) {
+      console.log('Post not found for comment');
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    console.log('Post found:', {
+      id: post.id,
+      authorId: post.authorId,
+      title: post.title?.substring(0, 50) + '...'
+    });
+    
     // Check if user is the comment author or the post author
-    const isCommentAuthor = comment.user._id.toString() === req.user.id;
-    const isPostAuthor = comment.post.author && comment.post.author.toString() === req.user.id;
+    const isCommentAuthor = comment.userId === req.user.id;
+    const isPostAuthor = post.authorId === req.user.id;
+    
+    console.log('Authorization check:', {
+      isCommentAuthor,
+      isPostAuthor,
+      commentUserId: comment.userId,
+      postAuthorId: post.authorId,
+      currentUserId: req.user.id
+    });
     
     if (!isCommentAuthor && !isPostAuthor) {
-      return res.status(403).json({ error: 'Not authorized to delete this comment' });
+      console.log('User not authorized to delete comment');
+      return res.status(403).json({ 
+        error: 'Not authorized to delete this comment',
+        details: {
+          isCommentAuthor,
+          isPostAuthor,
+          commentUserId: comment.userId,
+          postAuthorId: post.authorId,
+          currentUserId: req.user.id
+        }
+      });
     }
     
     // Update post comment count
-    const post = await Post.findById(comment.post._id);
-    if (post) {
-      post.comments = Math.max(0, (post.comments || 0) - 1);
-      await post.save();
-    }
+    post.comments = Math.max(0, (post.comments || 0) - 1);
+    await post.save();
     
     // Delete the comment
-    await Comment.findByIdAndDelete(req.params.commentId);
+    await comment.destroy();
     
+    console.log('Comment deleted successfully');
     res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
     console.error('Error deleting comment:', error);

@@ -1,16 +1,27 @@
-import mongoose from 'mongoose';
+import { Sequelize } from 'sequelize';
+import config from './environment.js';
+
+const sequelize = new Sequelize(
+  config.mysqlDatabase,
+  config.mysqlUser,
+  config.mysqlPassword,
+  {
+    host: config.mysqlHost,
+    port: config.mysqlPort,
+    dialect: 'mysql',
+    logging: false,
+  }
+);
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log('MongoDB connected');
+    await sequelize.authenticate();
+    console.log('MySQL connected');
   } catch (error) {
-    console.error('MongoDB connection error:', error.message);
+    console.error('MySQL connection error:', error);
     process.exit(1);
   }
 };
 
+export { sequelize };
 export default connectDB; 

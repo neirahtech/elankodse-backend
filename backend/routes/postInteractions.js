@@ -4,10 +4,73 @@ import Post from '../models/Post.js';
 
 const router = express.Router();
 
+// Toggle like/unlike a post
+router.post('/:id/toggle-like', async (req, res) => {
+  try {
+    const post = await Post.findOne({ where: { postId: req.params.id } });
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    
+    // For anonymous users, use a combination of IP and user agent for better consistency
+    const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+    
+    // Ensure likedBy is an array
+    let likedBy = post.likedBy || [];
+    if (!Array.isArray(likedBy)) {
+      likedBy = [];
+    }
+    
+    console.log('🔍 Like toggle debug:', {
+      postId: req.params.id,
+      userId,
+      currentLikes: post.likes,
+      currentLikedBy: likedBy,
+      userAgent: req.get('User-Agent')?.slice(0, 50)
+    });
+    
+    const hasLiked = likedBy.some(id => id.toString() === userId.toString());
+    
+    console.log('🔍 Has liked:', hasLiked);
+    
+    if (hasLiked) {
+      // Unlike
+      console.log('🔄 Unlike operation');
+      post.likes = Math.max(0, (post.likes || 0) - 1);
+      post.likedBy = likedBy.filter(id => id.toString() !== userId.toString());
+    } else {
+      // Like
+      console.log('🔄 Like operation');
+      post.likes = (post.likes || 0) + 1;
+      post.likedBy = [...likedBy, userId];
+    }
+    
+    console.log('🔍 After operation:', {
+      newLikes: post.likes,
+      newLikedBy: post.likedBy
+    });
+    
+    await post.save();
+    
+    // Verify the save worked by fetching the post again
+    const savedPost = await Post.findOne({ where: { postId: req.params.id } });
+    console.log('🔍 After save verification:', {
+      savedLikes: savedPost.likes,
+      savedLikedBy: savedPost.likedBy
+    });
+    
+    res.json({ 
+      likes: post.likes,
+      userLiked: !hasLiked // Return the new state
+    });
+  } catch (error) {
+    console.error('Error toggling like:', error);
+    res.status(500).json({ error: 'Failed to toggle like' });
+  }
+});
+
 // Like a post
 router.post('/:id/like', auth, async (req, res) => {
   try {
-  const post = await Post.findOne({ postId: req.params.id });
+  const post = await Post.findOne({ where: { postId: req.params.id } });
   if (!post) return res.status(404).json({ error: 'Post not found' });
     
     const userId = req.user.id; // Use req.user.id instead of req.user._id
@@ -32,14 +95,19 @@ router.post('/:id/like', auth, async (req, res) => {
 // View a post (increment views, prevent abuse)
 router.post('/:id/view', async (req, res) => {
   try {
-  const post = await Post.findOne({ postId: req.params.id });
+  const post = await Post.findOne({ where: { postId: req.params.id } });
   if (!post) return res.status(404).json({ error: 'Post not found' });
-    
-    const userId = req.user ? req.user.id : null;
+  
+  // Ensure viewedBy is always an array
+  if (!Array.isArray(post.viewedBy)) {
+    post.viewedBy = [];
+  }
+  
+  const userId = req.user ? req.user.id : null;
   const ip = req.ip;
   const now = new Date();
   let canIncrement = true;
-    
+  
   // Check if user or IP has viewed in last 6 hours
   if (userId) {
     const last = post.viewedBy.find(v => v.user && v.user.toString() === userId);
@@ -48,7 +116,7 @@ router.post('/:id/view', async (req, res) => {
     const last = post.viewedBy.find(v => v.ip === ip);
     if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
   }
-    
+  
   if (canIncrement) {
       post.views = (post.views || 0) + 1;
       if (!post.viewedBy) post.viewedBy = [];
@@ -70,8 +138,8 @@ router.post('/:id/view', async (req, res) => {
     }
     await post.save();
   }
-    
-    res.json({ views: post.views || 0 });
+  
+  res.json({ views: post.views || 0 });
   } catch (error) {
     console.error('Error recording view:', error);
     res.status(500).json({ error: 'Failed to record view' });

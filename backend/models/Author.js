@@ -1,11 +1,19 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
+// import Post from './Post.js'; // Remove to avoid circular dependency
 
-const AuthorSchema = new mongoose.Schema({
-  name: String,
-  avatar: String,
-  quote: String,
-  updatedAt: Date,
+const Author = sequelize.define('Author', {
+  id: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    autoIncrement: true,
+    primaryKey: true,
+  },
+  name: DataTypes.STRING,
+  avatar: DataTypes.STRING,
+  quote: DataTypes.STRING,
+  updatedAt: DataTypes.DATE,
+}, {
+  timestamps: false,
 });
 
-const Author = mongoose.model('Author', AuthorSchema);
 export default Author; 

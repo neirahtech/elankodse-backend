@@ -1,10 +1,52 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
 
-const CommentSchema = new mongoose.Schema({
-  post: { type: mongoose.Schema.Types.ObjectId, ref: 'Post', required: true },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  text: { type: String, required: true },
-}, { timestamps: true });
+const Comment = sequelize.define('Comment', {
+  id: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    autoIncrement: true,
+    primaryKey: true,
+  },
+  postId: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false,
+    references: {
+      model: 'Posts',
+      key: 'id'
+    }
+  },
+  userId: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: true, // Make optional for anonymous comments
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
+  },
+  text: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  // User information for anonymous comments
+  userFirstName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  userLastName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  userAvatar: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  // Anonymous identifier
+  anonymousId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+}, {
+  timestamps: true,
+});
 
-const Comment = mongoose.model('Comment', CommentSchema);
 export default Comment; 

@@ -3,9 +3,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const config = {
-  // Database
-  mongodbUri: process.env.MONGODB_URI || 'mongodb+srv://dev:Dev403lank0ds3@cluster0.vnyqss5.mongodb.net/tamilwriter?retryWrites=true&w=majority',
-  
+  // MySQL
+  mysqlHost: process.env.MYSQL_HOST || 'localhost',
+  mysqlUser: process.env.MYSQL_USER || 'root',
+  mysqlPassword: process.env.MYSQL_PASSWORD || '',
+  mysqlDatabase: process.env.MYSQL_DATABASE || 'elankodse',
+  mysqlPort: process.env.MYSQL_PORT || 3306,
+
   // Server
   port: process.env.PORT || 8084,
   nodeEnv: process.env.NODE_ENV || 'development',
