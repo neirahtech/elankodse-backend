@@ -45,6 +45,12 @@ const Comment = sequelize.define('Comment', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  // Hidden status for comments
+  hidden: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
 }, {
   timestamps: true,
 });

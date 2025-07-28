@@ -1,5 +1,5 @@
 import express from 'express';
-import auth from '../middleware/auth.js';
+import auth, { optionalAuth } from '../middleware/auth.js';
 import Comment from '../models/Comment.js';
 import Post from '../models/Post.js';
 import User from '../models/User.js';
@@ -31,7 +31,7 @@ async function findPostByIdentifier(identifier) {
 }
 
 // Get comments for a post
-router.get('/:postId', async (req, res) => {
+router.get('/:postId', optionalAuth, async (req, res) => {
   try {
     // Find the post by postId or numeric id
     const post = await findPostByIdentifier(req.params.postId);
@@ -39,8 +39,17 @@ router.get('/:postId', async (req, res) => {
       return res.status(404).json({ error: 'Post not found' });
     }
     
+    // Check if user is the post author or admin
+    const isAuthor = req.user && (req.user.id === post.authorId || req.user.isAuthor);
+    
+    // If user is not the author, exclude hidden comments
+    const whereClause = { postId: post.id };
+    if (!isAuthor) {
+      whereClause.hidden = false;
+    }
+    
     const comments = await Comment.findAll({
-      where: { postId: post.id },
+      where: whereClause,
       order: [['createdAt', 'DESC']]
     });
     
@@ -142,6 +151,45 @@ router.get('/debug/auth', auth, (req, res) => {
     email: req.user.email,
     isAuthor: req.user.isAuthor
   });
+});
+
+// Toggle comment visibility (hide/unhide) - Author only
+router.post('/:commentId/toggle-hide', auth, async (req, res) => {
+  try {
+    const comment = await Comment.findByPk(req.params.commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    
+    // Get the post to check if user is the post author
+    const post = await Post.findByPk(comment.postId);
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    // Check if user is the post author or admin
+    const isPostAuthor = post.authorId === req.user.id;
+    const isAdmin = req.user.isAuthor; // Assuming isAuthor means admin/author privileges
+    
+    if (!isPostAuthor && !isAdmin) {
+      return res.status(403).json({ 
+        error: 'Only the post author can hide/unhide comments' 
+      });
+    }
+    
+    // Toggle the hidden status
+    comment.hidden = !comment.hidden;
+    await comment.save();
+    
+    res.json({ 
+      message: `Comment ${comment.hidden ? 'hidden' : 'unhidden'} successfully`,
+      hidden: comment.hidden,
+      commentId: comment.id
+    });
+  } catch (error) {
+    console.error('Error toggling comment visibility:', error);
+    res.status(500).json({ error: 'Failed to toggle comment visibility' });
+  }
 });
 
 // Delete a comment

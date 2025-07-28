@@ -3,9 +3,17 @@ import Post from '../models/Post.js';
 export const getAllPosts = async (req, res) => {
   try {
     console.log('Fetching all posts...');
+    
+    // Build where clause - only authors can see hidden posts
+    const whereClause = {};
+    if (!req.user || !req.user.isAuthor) {
+      whereClause.hidden = false;
+    }
+    
     const posts = await Post.findAll({
+      where: whereClause,
       attributes: [
-        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt'
+        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden'
       ],
       order: [['date', 'DESC']]
     });
@@ -32,12 +40,17 @@ export const getAllPosts = async (req, res) => {
 export const getPublishedPosts = async (req, res) => {
   try {
     console.log('Fetching published posts...');
+    
+    // Build where clause - only published and not hidden posts for non-authors
+    const whereClause = { status: 'published' };
+    if (!req.user || !req.user.isAuthor) {
+      whereClause.hidden = false;
+    }
+    
     const posts = await Post.findAll({
-      where: {
-        status: 'published'
-      },
+      where: whereClause,
       attributes: [
-        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt'
+        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden'
       ],
       order: [['date', 'DESC']]
     });
@@ -73,10 +86,16 @@ export const getPostById = async (req, res) => {
     }
 
     // Try to find by postId first, then by id
+    const whereClause = { postId: id };
+    // Add hidden filter for non-authors
+    if (!req.user || !req.user.isAuthor) {
+      whereClause.hidden = false;
+    }
+    
     let post = await Post.findOne({ 
-      where: { postId: id },
+      where: whereClause,
       attributes: [
-        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt'
+        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden'
       ]
     });
     console.log('Search by postId result:', post ? 'Found' : 'Not found');
@@ -86,9 +105,16 @@ export const getPostById = async (req, res) => {
       const numericId = parseInt(id);
       console.log('Trying numeric ID:', numericId);
       if (!isNaN(numericId)) {
-        post = await Post.findByPk(numericId, {
+        const numericWhereClause = { id: numericId };
+        // Add hidden filter for non-authors
+        if (!req.user || !req.user.isAuthor) {
+          numericWhereClause.hidden = false;
+        }
+        
+        post = await Post.findOne({
+          where: numericWhereClause,
           attributes: [
-            'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt'
+            'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden'
           ]
         });
         console.log('Search by numeric ID result:', post ? 'Found' : 'Not found');

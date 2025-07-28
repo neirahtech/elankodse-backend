@@ -14,10 +14,19 @@ import notificationRoutes from './routes/notifications.js';
 import commentRoutes from './routes/comments.js';
 import postInteractionRoutes from './routes/postInteractions.js';
 import imageRoutes from './routes/images.js';
+import aboutRoutes from './routes/about.js';
+import bookRoutes from './routes/books.js';
+import socialRoutes from './routes/social.js';
+import subscriptionRoutes from './routes/subscription.js';
+import footerRoutes from './routes/footer.js';
 import { fetchAndCacheBloggerData } from './controllers/utilityController.js';
+import { seedAboutContent } from './scripts/seedAbout.js';
+import { seedBooks } from './scripts/seedBooks.js';
 import './models/index.js'; // Import all models and set up associations
 import './models/Author.js';
 import './models/Post.js';
+import './models/About.js';
+import './models/Book.js';
 
 dotenv.config();
 
@@ -31,6 +40,14 @@ connectDB().then(async () => {
     await fetchAndCacheBloggerData();
   } catch (err) {
     console.error('Blogger sync failed:', err);
+  }
+
+  // Seed default about content
+  try {
+    await seedAboutContent();
+    await seedBooks();
+  } catch (err) {
+    console.error('Content seeding failed:', err);
   }
 
   const app = express();
@@ -60,6 +77,11 @@ connectDB().then(async () => {
   app.use('/api/comments', commentRoutes);
   app.use('/api/post', postInteractionRoutes);
   app.use('/api/images', imageRoutes);
+  app.use('/api/about', aboutRoutes);
+  app.use('/api/books', bookRoutes);
+  app.use('/api/social', socialRoutes);
+  app.use('/api/newsletter', subscriptionRoutes);
+  app.use('/api/footer', footerRoutes);
 
   // Root endpoint
   app.get('/', (req, res) => {

@@ -2,6 +2,7 @@ import express from 'express';
 import { getAllPosts, getPublishedPosts, getPostById } from '../controllers/postController.js';
 import Post from '../models/Post.js';
 import auth from '../middleware/auth.js';
+import optionalAuth from '../middleware/optionalAuth.js';
 import requireAuthor from '../middleware/author.js';
 import { sequelize } from '../config/db.js';
 import { Op } from 'sequelize';
@@ -70,8 +71,8 @@ router.post('/upload-image', auth, requireAuthor, upload.single('image'), (req, 
   }
 });
 
-router.get('/', getAllPosts);
-router.get('/published', getPublishedPosts);
+router.get('/', optionalAuth, getAllPosts);
+router.get('/published', optionalAuth, getPublishedPosts);
 router.get('/categories', async (req, res) => {
   try {
     // Check if Post model is available
@@ -99,7 +100,7 @@ router.get('/categories', async (req, res) => {
     res.json([]);
   }
 });
-router.get('/:id', getPostById);
+router.get('/:id', optionalAuth, getPostById);
 
 // Create post (author only)
 router.post('/', auth, requireAuthor, async (req, res) => {

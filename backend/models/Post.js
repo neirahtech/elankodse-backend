@@ -48,6 +48,10 @@ const Post = sequelize.define('Post', {
     type: DataTypes.ENUM('published', 'draft', 'scheduled'),
     defaultValue: 'published',
   },
+  hidden: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
   authorId: {
     type: DataTypes.INTEGER.UNSIGNED,
     references: {

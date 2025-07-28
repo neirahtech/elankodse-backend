@@ -1,5 +1,6 @@
 import express from 'express';
 import auth from '../middleware/auth.js';
+import requireAuthor from '../middleware/author.js';
 import Post from '../models/Post.js';
 
 const router = express.Router();
@@ -64,6 +65,28 @@ router.post('/:id/toggle-like', async (req, res) => {
   } catch (error) {
     console.error('Error toggling like:', error);
     res.status(500).json({ error: 'Failed to toggle like' });
+  }
+});
+
+// Toggle hide/unhide a post (Author only)
+router.post('/:id/toggle-hide', auth, requireAuthor, async (req, res) => {
+  try {
+    const post = await Post.findOne({ where: { postId: req.params.id } });
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    
+    // Toggle the hidden status
+    post.hidden = !post.hidden;
+    await post.save();
+    
+    console.log(`📝 Post ${req.params.id} ${post.hidden ? 'hidden' : 'unhidden'} by author`);
+    
+    res.json({ 
+      hidden: post.hidden,
+      message: post.hidden ? 'Post hidden successfully' : 'Post unhidden successfully'
+    });
+  } catch (error) {
+    console.error('Error toggling post visibility:', error);
+    res.status(500).json({ error: 'Failed to toggle post visibility' });
   }
 });
 

@@ -43,6 +43,14 @@ const User = sequelize.define('User', {
   isAuthor: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
+  },
+  resetPasswordToken: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  resetPasswordExpires: {
+    type: DataTypes.DATE,
+    allowNull: true,
   }
 }, {
   timestamps: true,
