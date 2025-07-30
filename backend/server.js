@@ -35,11 +35,21 @@ connectDB().then(async () => {
   const { sequelize } = await import('./config/db.js');
   await sequelize.sync(); // This will create all tables if they don't exist
 
-  // Now run Blogger sync
-  try {
-    await fetchAndCacheBloggerData();
-  } catch (err) {
-    console.error('Blogger sync failed:', err);
+  // RESOURCE OPTIMIZATION: Commented out automatic Blogger sync for production
+  // This was causing high CPU/memory usage on startup
+  // Use 'npm run sync' to manually sync data when needed
+  // try {
+  //   await fetchAndCacheBloggerData();
+  // } catch (err) {
+  //   console.error('Blogger sync failed:', err);
+  // }
+
+  // Check existing posts count
+  const { Post } = await import('./models/index.js');
+  const postCount = await Post.count();
+  console.log(`📊 Posts in database: ${postCount}`);
+  if (postCount === 0) {
+    console.log('💡 No posts found. Run "npm run sync" to populate data from Blogger.');
   }
 
   // Seed default about content
@@ -60,8 +70,9 @@ connectDB().then(async () => {
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  // RESOURCE OPTIMIZATION: Reduced payload limits to save memory (2MB vs 10MB)
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
   
   // Serve static files for uploaded images
   app.use('/uploads', express.static('uploads'));
@@ -91,6 +102,72 @@ connectDB().then(async () => {
       serverUrl: config.getServerUrl(),
       timestamp: new Date().toISOString()
     });
+  });
+
+  // Manual sync endpoints (use only when needed to refresh Blogger data)
+  
+  // GET endpoint for easy browser testing
+  app.get('/api/admin/sync', async (req, res) => {
+    try {
+      console.log('🔄 Manual Blogger sync requested via GET...');
+      const { fetchAndCacheBloggerData } = await import('./controllers/utilityController.js');
+      
+      // Run sync in background to prevent timeout
+      setImmediate(async () => {
+        try {
+          await fetchAndCacheBloggerData();
+          console.log('✅ Background sync completed');
+        } catch (error) {
+          console.error('❌ Background sync failed:', error);
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: 'Blogger sync started in background. Check server logs for progress.',
+        method: 'GET',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Sync failed to start:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to start sync',
+        details: error.message
+      });
+    }
+  });
+
+  // POST endpoint for API calls
+  app.post('/api/admin/sync', async (req, res) => {
+    try {
+      console.log('🔄 Manual Blogger sync requested via POST...');
+      const { fetchAndCacheBloggerData } = await import('./controllers/utilityController.js');
+      
+      // Run sync in background to prevent timeout
+      setImmediate(async () => {
+        try {
+          await fetchAndCacheBloggerData();
+          console.log('✅ Background sync completed');
+        } catch (error) {
+          console.error('❌ Background sync failed:', error);
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: 'Blogger sync started in background. Check server logs for progress.',
+        method: 'POST',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Sync failed to start:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to start sync',
+        details: error.message
+      });
+    }
   });
 
   // Test endpoint to verify posts are available
@@ -145,9 +222,18 @@ connectDB().then(async () => {
 
   const PORT = config.port;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Environment: ${config.nodeEnv}`);
-    console.log(`Server URL: ${config.getServerUrl()}`);
-    console.log(`Allowed Origins: ${config.allowedOrigins.join(', ')}`);
+    console.log('');
+    console.log('🎉 Server started successfully (Resource Optimized)!');
+    console.log(`🌐 Port: ${PORT}`);
+    console.log(`📍 Environment: ${config.nodeEnv}`);
+    console.log(`🔗 Server URL: ${config.getServerUrl()}`);
+    console.log(`🛡️  CORS Origins: ${config.allowedOrigins.join(', ')}`);
+    console.log('');
+    console.log('🚨 OPTIMIZATIONS ACTIVE:');
+    console.log('  ✅ No automatic Blogger sync on startup');
+    console.log('  ✅ Reduced memory limits (2MB vs 10MB)');
+    console.log('  ✅ Manual sync available: POST /api/admin/sync');
+    console.log('  ✅ Or use: npm run sync');
+    console.log('');
   });
 }); 

@@ -6,9 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "setup:dev": "node scripts/setup-env.js",
-    "setup:prod": "node scripts/setup-env.js --production",
-    "test:api": "curl http://localhost:8084/api/health"
+    "backup": "node scripts/backup.js",
+    "sync": "node scripts/sync-blogger.js"
   },
   "dependencies": {
     "axios": "^1.10.0",
