@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import config from '../config/environment.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,7 +46,7 @@ export const uploadImage = async (req, res) => {
     
     // Create relative path and URL
     const relativePath = `uploads/images/${filename}`;
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = config.getServerUrl();
     const url = `${baseUrl}/${relativePath}`;
 
     // Try to get image dimensions using sharp (optional)

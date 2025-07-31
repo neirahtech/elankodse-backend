@@ -33,7 +33,7 @@ router.get('/meta/:postId', async (req, res) => {
     }
 
     const baseUrl = process.env.PRODUCTION_URL || 'http://localhost:8084';
-    const frontendUrl = process.env.FRONTEND_URL || 'https://elankodse.com';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://localhost:5173';
     
     const metaData = {
       title: post.title,
