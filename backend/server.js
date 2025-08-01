@@ -19,6 +19,7 @@ import bookRoutes from './routes/books.js';
 import socialRoutes from './routes/social.js';
 import subscriptionRoutes from './routes/subscription.js';
 import footerRoutes from './routes/footer.js';
+import publicRoutes from './routes/public.js';
 import { fetchAndCacheBloggerData } from './controllers/utilityController.js';
 import { seedAboutContent } from './scripts/seedAbout.js';
 import { seedBooks } from './scripts/seedBooks.js';
@@ -93,6 +94,7 @@ connectDB().then(async () => {
   app.use('/api/social', socialRoutes);
   app.use('/api/newsletter', subscriptionRoutes);
   app.use('/api/footer', footerRoutes);
+  app.use('/api/public', publicRoutes);
 
   // Root endpoint
   app.get('/', (req, res) => {

@@ -22,7 +22,8 @@ export const getAllPosts = async (req, res) => {
     const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
     const postsWithUserLiked = posts.map(post => {
       const postData = post.toJSON();
-      const hasLiked = postData.likedBy && postData.likedBy.some(id => id.toString() === userId.toString());
+      const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
+      const hasLiked = likedByArray.some(id => id.toString() === userId.toString());
       return {
         ...postData,
         userLiked: hasLiked
@@ -59,7 +60,8 @@ export const getPublishedPosts = async (req, res) => {
     const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
     const postsWithUserLiked = posts.map(post => {
       const postData = post.toJSON();
-      const hasLiked = postData.likedBy && postData.likedBy.some(id => id.toString() === userId.toString());
+      const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
+      const hasLiked = likedByArray.some(id => id.toString() === userId.toString());
       return {
         ...postData,
         userLiked: hasLiked
@@ -129,7 +131,8 @@ export const getPostById = async (req, res) => {
     // Add userLiked field to the post
     const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
     const postData = post.toJSON();
-    const hasLiked = postData.likedBy && postData.likedBy.some(id => id.toString() === userId.toString());
+    const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
+    const hasLiked = likedByArray.some(id => id.toString() === userId.toString());
     const postWithUserLiked = {
       ...postData,
       userLiked: hasLiked
