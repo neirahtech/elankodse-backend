@@ -32,7 +32,7 @@ router.get('/meta/:postId', async (req, res) => {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const baseUrl = process.env.PRODUCTION_URL || 'http://localhost:8084';
+    const baseUrl = process.env.PRODUCTION_URL || 'http://localhost:8085';
     const frontendUrl = process.env.FRONTEND_URL || 'https://localhost:5173';
     
     const metaData = {
