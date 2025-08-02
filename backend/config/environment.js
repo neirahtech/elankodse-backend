@@ -16,8 +16,15 @@ const config = {
   
   // CORS
   allowedOrigins: process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
-    : ['http://localhost:5173', 'https://elankodse.com', 'https://dev-backend.elankodse.com'],
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : [
+        'http://localhost:5173', 
+        'http://localhost:3000',
+        'http://localhost:8085',
+        'https://elankodse.com', 
+        'https://www.elankodse.com',
+        'https://elankodse-backend.onrender.com'
+      ],
   
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'your_jwt_secret_here',

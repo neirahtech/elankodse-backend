@@ -64,13 +64,38 @@ connectDB().then(async () => {
 
   const app = express();
 
+  // Debug CORS configuration
+  console.log('🔧 CORS Configuration:');
+  console.log('Allowed Origins:', config.allowedOrigins);
+  console.log('Node Environment:', process.env.NODE_ENV);
+
   // Configure CORS with environment-specific settings
-  app.use(cors({
-    origin: config.allowedOrigins,
+  const corsOptions = {
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      console.log('🌐 CORS Request from origin:', origin);
+      
+      if (config.allowedOrigins.includes(origin)) {
+        console.log('✅ CORS allowed for:', origin);
+        callback(null, true);
+      } else {
+        console.log('❌ CORS blocked for:', origin);
+        console.log('Allowed origins:', config.allowedOrigins);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  }));
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  };
+
+  app.use(cors(corsOptions));
+
+  // Add explicit preflight handling
+  app.options('*', cors(corsOptions));
 
   // RESOURCE OPTIMIZATION: Reduced payload limits to save memory (2MB vs 10MB)
   app.use(express.json({ limit: '2mb' }));

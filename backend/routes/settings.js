@@ -27,4 +27,22 @@ router.put('/password', auth, async (req, res) => {
   res.json({ message: 'Password updated' });
 });
 
+// Ad popup settings
+router.get('/ad-popup', async (req, res) => {
+  try {
+    // For now, return default settings
+    // In the future, you can store this in database
+    res.json({
+      enabled: false, // Disable ad popup by default
+      imageUrl: 'https://elankodse.com/uploads/images/ad_popup_1753611038506.jpg',
+      title: 'Special Offer',
+      message: 'Check out our latest books!',
+      showInterval: 24 * 60 * 60 * 1000 // 24 hours
+    });
+  } catch (error) {
+    console.error('Error fetching ad popup settings:', error);
+    res.status(500).json({ error: 'Failed to fetch ad popup settings' });
+  }
+});
+
 export default router; 
