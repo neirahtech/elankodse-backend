@@ -101,8 +101,26 @@ connectDB().then(async () => {
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
   
-  // Serve static files for uploaded images
-  app.use('/uploads', express.static('uploads'));
+  // Serve static files for uploaded images with CORS headers
+  app.use('/uploads', (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    next();
+  }, express.static('uploads'));
+
+  // Add a test endpoint to check if files exist
+  app.get('/api/test-image/:filename', (req, res) => {
+    const path = require('path');
+    const fs = require('fs');
+    const imagePath = path.join(process.cwd(), 'uploads', 'images', req.params.filename);
+    
+    if (fs.existsSync(imagePath)) {
+      res.json({ exists: true, path: `/uploads/images/${req.params.filename}` });
+    } else {
+      res.json({ exists: false, path: imagePath });
+    }
+  });
 
   app.use('/api/author', authorRoutes);
   app.use('/api/posts', postRoutes);
