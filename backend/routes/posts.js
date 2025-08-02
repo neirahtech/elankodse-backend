@@ -1,5 +1,5 @@
 import express from 'express';
-import { getAllPosts, getPublishedPosts, getPostById } from '../controllers/postController.js';
+import { getAllPosts, getPublishedPosts, getPostById, getPostCount } from '../controllers/postController.js';
 import Post from '../models/Post.js';
 import auth from '../middleware/auth.js';
 import optionalAuth from '../middleware/optionalAuth.js';
@@ -73,6 +73,7 @@ router.post('/upload-image', auth, requireAuthor, upload.single('image'), (req, 
 
 router.get('/', optionalAuth, getAllPosts);
 router.get('/published', optionalAuth, getPublishedPosts);
+router.get('/count', getPostCount);
 router.get('/categories', async (req, res) => {
   try {
     // Check if Post model is available

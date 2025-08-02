@@ -21,6 +21,7 @@ import subscriptionRoutes from './routes/subscription.js';
 import footerRoutes from './routes/footer.js';
 import publicRoutes from './routes/public.js';
 import metaRoutes from './routes/meta.js';
+import fixImagesRoutes from './routes/fix-images.js';
 import { fetchAndCacheBloggerData } from './controllers/utilityController.js';
 import { seedAboutContent } from './scripts/seedAbout.js';
 import { seedBooks } from './scripts/seedBooks.js';
@@ -140,6 +141,7 @@ connectDB().then(async () => {
   app.use('/api/footer', footerRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/meta', metaRoutes);
+  app.use('/api/fix', fixImagesRoutes);
 
   // Root endpoint
   app.get('/', (req, res) => {

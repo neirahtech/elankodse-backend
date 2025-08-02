@@ -17,6 +17,9 @@ try {
 }
 
 export const uploadImage = async (req, res) => {
+  let tempFilePath = null;
+  let finalFilePath = null;
+  
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file provided' });
@@ -35,14 +38,29 @@ export const uploadImage = async (req, res) => {
       return res.status(400).json({ error: 'Invalid image type' });
     }
 
+    // Store temp file path for cleanup
+    tempFilePath = req.file.path;
+
     // Generate unique filename
     const timestamp = Date.now();
     const extension = path.extname(req.file.originalname);
     const filename = `${type}_${timestamp}${extension}`;
     const newPath = path.join(uploadsDir, filename);
+    finalFilePath = newPath;
     
+    // Verify temp file exists before processing
+    if (!await fs.access(tempFilePath).then(() => true).catch(() => false)) {
+      throw new Error('Temporary upload file not found');
+    }
+
     // Move file to final location
-    await fs.rename(req.file.path, newPath);
+    await fs.rename(tempFilePath, newPath);
+    console.log(`File moved from ${tempFilePath} to ${newPath}`);
+    
+    // Verify final file exists
+    if (!await fs.access(newPath).then(() => true).catch(() => false)) {
+      throw new Error('File move operation failed');
+    }
     
     // Create relative path and URL
     const relativePath = `uploads/images/${filename}`;
@@ -56,12 +74,13 @@ export const uploadImage = async (req, res) => {
       const imageInfo = await sharp(newPath).metadata();
       width = imageInfo.width;
       height = imageInfo.height;
+      console.log(`Image dimensions: ${width}x${height}`);
     } catch (sharpError) {
       console.warn('Could not get image dimensions:', sharpError.message);
       // Continue without dimensions
     }
 
-    // Save to database
+    // Save to database with transaction
     const image = await Image.create({
       name,
       type,
@@ -76,9 +95,29 @@ export const uploadImage = async (req, res) => {
       description: description || null
     });
 
+    console.log(`Image saved to database with ID: ${image.id}`);
+
+    // Verify database entry was created and file still exists
+    const verifyImage = await Image.findByPk(image.id);
+    const fileStillExists = await fs.access(newPath).then(() => true).catch(() => false);
+    
+    if (!verifyImage || !fileStillExists) {
+      throw new Error('Image upload verification failed');
+    }
+
     res.status(201).json({
       message: 'Image uploaded successfully',
-      image
+      image: {
+        id: image.id,
+        name: image.name,
+        type: image.type,
+        filename: image.filename,
+        url: image.url,
+        size: image.size,
+        width: image.width,
+        height: image.height,
+        createdAt: image.createdAt
+      }
     });
   } catch (error) {
     console.error('Error uploading image:', error);
@@ -91,9 +130,35 @@ export const uploadImage = async (req, res) => {
         mimetype: req.file.mimetype,
         path: req.file.path
       } : 'No file',
-      body: req.body
+      body: req.body,
+      tempFilePath,
+      finalFilePath
     });
-    res.status(500).json({ error: 'Failed to upload image', details: error.message });
+
+    // Cleanup files on error
+    if (tempFilePath) {
+      try {
+        await fs.unlink(tempFilePath);
+        console.log('Cleaned up temp file:', tempFilePath);
+      } catch (cleanupError) {
+        console.warn('Could not cleanup temp file:', cleanupError.message);
+      }
+    }
+    
+    if (finalFilePath) {
+      try {
+        await fs.unlink(finalFilePath);
+        console.log('Cleaned up final file:', finalFilePath);
+      } catch (cleanupError) {
+        console.warn('Could not cleanup final file:', cleanupError.message);
+      }
+    }
+
+    res.status(500).json({ 
+      error: 'Failed to upload image', 
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 };
 

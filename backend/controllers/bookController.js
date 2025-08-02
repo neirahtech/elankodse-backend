@@ -1,4 +1,31 @@
 import Book from '../models/Book.js';
+import config from '../config/environment.js';
+
+// Utility function to convert image URLs to current environment
+const convertImageUrl = (imageUrl) => {
+  if (!imageUrl) return imageUrl;
+  
+  // Extract the filename from any URL
+  const filename = imageUrl.split('/').pop();
+  
+  // Use production URL if forced or in production environment
+  if (config.forceProductionUrls || config.isProduction) {
+    return `${config.productionUrl}/uploads/images/${filename}`;
+  }
+  
+  // Return URL for current local environment
+  const currentBaseUrl = config.getServerUrl();
+  return `${currentBaseUrl}/uploads/images/${filename}`;
+};
+
+// Utility function to process book data with correct image URLs
+const processBookData = (book) => {
+  const bookData = book.toJSON ? book.toJSON() : book;
+  return {
+    ...bookData,
+    coverImage: convertImageUrl(bookData.coverImage)
+  };
+};
 
 // Get all books (public endpoint)
 export const getBooks = async (req, res) => {
@@ -10,7 +37,10 @@ export const getBooks = async (req, res) => {
       order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']]
     });
     
-    res.json(books);
+    // Process books to ensure correct image URLs for current environment
+    const processedBooks = books.map(processBookData);
+    
+    res.json(processedBooks);
   } catch (error) {
     console.error('Error fetching books:', error);
     res.status(500).json({ error: 'Failed to fetch books' });
@@ -24,7 +54,10 @@ export const getAllBooks = async (req, res) => {
       order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']]
     });
     
-    res.json(books);
+    // Process books to ensure correct image URLs for current environment
+    const processedBooks = books.map(processBookData);
+    
+    res.json(processedBooks);
   } catch (error) {
     console.error('Error fetching all books:', error);
     res.status(500).json({ error: 'Failed to fetch books' });
@@ -41,7 +74,10 @@ export const getBookById = async (req, res) => {
       return res.status(404).json({ error: 'Book not found' });
     }
     
-    res.json(book);
+    // Process book to ensure correct image URL for current environment
+    const processedBook = processBookData(book);
+    
+    res.json(processedBook);
   } catch (error) {
     console.error('Error fetching book:', error);
     res.status(500).json({ error: 'Failed to fetch book' });

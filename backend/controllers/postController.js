@@ -1,5 +1,20 @@
 import Post from '../models/Post.js';
 
+export const getPostCount = async (req, res) => {
+  try {
+    const count = await Post.count({
+      where: { 
+        status: 'published',
+        hidden: false 
+      }
+    });
+    res.json({ count });
+  } catch (err) {
+    console.error('Error getting post count:', err);
+    res.status(500).json({ error: 'Failed to get post count' });
+  }
+};
+
 export const getAllPosts = async (req, res) => {
   try {
     console.log('Fetching all posts...');
