@@ -23,7 +23,8 @@ const config = {
         'http://localhost:8085',
         'https://elankodse.com', 
         'https://www.elankodse.com',
-        'https://elankodse-backend.onrender.com'
+        'https://elankodse-backend.onrender.com',
+          'https://api.elankodse.com'
       ],
   
   // JWT
