@@ -281,14 +281,38 @@ class AnalyticsService {
       });
 
       if (!created) {
-        // Update existing analytics
-        const hourlyViews = analytics.hourlyViews || {};
+        // Update existing analytics - Handle JSON fields that might be strings
+        let hourlyViews = {};
+        try {
+          hourlyViews = typeof analytics.hourlyViews === 'string' 
+            ? JSON.parse(analytics.hourlyViews) 
+            : (analytics.hourlyViews || {});
+        } catch (e) {
+          console.warn('Failed to parse hourlyViews JSON, using empty object:', e.message);
+          hourlyViews = {};
+        }
         hourlyViews[data.viewHour] = (hourlyViews[data.viewHour] || 0) + 1;
 
-        const browsers = analytics.browsers || {};
+        let browsers = {};
+        try {
+          browsers = typeof analytics.browsers === 'string' 
+            ? JSON.parse(analytics.browsers) 
+            : (analytics.browsers || {});
+        } catch (e) {
+          console.warn('Failed to parse browsers JSON, using empty object:', e.message);
+          browsers = {};
+        }
         browsers[data.browser] = (browsers[data.browser] || 0) + 1;
 
-        const operatingSystems = analytics.operatingSystems || {};
+        let operatingSystems = {};
+        try {
+          operatingSystems = typeof analytics.operatingSystems === 'string' 
+            ? JSON.parse(analytics.operatingSystems) 
+            : (analytics.operatingSystems || {});
+        } catch (e) {
+          console.warn('Failed to parse operatingSystems JSON, using empty object:', e.message);
+          operatingSystems = {};
+        }
         operatingSystems[data.operatingSystem] = (operatingSystems[data.operatingSystem] || 0) + 1;
 
         await analytics.update({
