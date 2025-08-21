@@ -3,12 +3,12 @@
 
 export const PRODUCTION_URLS = {
   // Production Frontend URLs
-  FRONTEND_MAIN: 'https://elankodse.com',
-  FRONTEND_WWW: 'https://www.elankodse.com',
+  FRONTEND_MAIN: 'https://test.elankodse.com',
+  FRONTEND_WWW: 'https://www.test.elankodse.com',
   FRONTEND_DIGITALOCEAN: 'https://digitalocean.elankodse.com',
   
   // Production Backend URLs
-  BACKEND_API: 'https://api.elankodse.com',
+  BACKEND_API: 'https://elankodse-backend.onrender.com',
   BACKEND_MAIN: 'https://elankodse.com',
   
   // Development URLs (fallbacks)
