@@ -13,6 +13,8 @@ const router = express.Router();
 // Middleware to track page views (public endpoint)
 router.post('/track', async (req, res) => {
   try {
+    console.log('Analytics track request body:', JSON.stringify(req.body, null, 2));
+    
     const {
       postId,
       url,
@@ -25,13 +27,27 @@ router.post('/track', async (req, res) => {
 
     // Validate required fields
     if (!url) {
+      console.warn('Analytics track request missing URL:', req.body);
       return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (error) {
+      console.warn('Analytics track request invalid URL format:', url);
+      return res.status(400).json({ error: 'Invalid URL format' });
     }
 
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
     const referrer = req.get('Referer');
     const userId = req.user ? req.user.id : null;
+
+    console.log('Analytics track data:', {
+      postId, url, title, sessionId, timeOnPage, scrollDepth, visitorId,
+      ipAddress, userAgent: userAgent?.substring(0, 100) + '...'
+    });
 
     const pageView = await analyticsService.recordPageView({
       postId,
@@ -47,13 +63,26 @@ router.post('/track', async (req, res) => {
       visitorId
     });
 
-    res.json({ 
-      success: true, 
-      visitorId: pageView ? pageView.visitorId : visitorId 
-    });
+    if (pageView) {
+      res.json({ 
+        success: true, 
+        visitorId: pageView.visitorId
+      });
+    } else {
+      // Bot traffic or filtered out
+      res.json({ 
+        success: true, 
+        filtered: true,
+        reason: 'Bot traffic or filtered'
+      });
+    }
   } catch (error) {
-    console.error('Error tracking page view:', error);
-    res.status(500).json({ error: 'Failed to track page view' });
+    console.error('Analytics track error:', error);
+    console.error('Request body that caused error:', req.body);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Analytics tracking failed'
+    });
   }
 });
 

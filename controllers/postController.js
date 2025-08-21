@@ -234,11 +234,38 @@ export const getPublishedPosts = async (req, res) => {
     
     // Check cache first for page 1 (unless cache busting is requested)
     const cacheKey = `published_posts_${page}_${limit}`;
+    let cachedPosts = null;
     if (page === 1 && !bustCache && postsCache.has(cacheKey)) {
       const cached = postsCache.get(cacheKey);
       if (Date.now() - cached.timestamp < CACHE_TTL) {
-        console.log(`Returning cached posts - Total time: ${Date.now() - startTime}ms`);
-        return res.json(cached.data);
+        console.log(`Using cached posts data - calculating userLiked fresh for current user`);
+        cachedPosts = cached.data.posts;
+        
+        // Calculate userLiked for current user on cached data
+        const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+        const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+        
+        const postsWithUserLiked = cachedPosts.map(postData => {
+          const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
+          
+          // Check if user has liked as authenticated user OR as anonymous user
+          const hasLikedAsAuth = req.user && likedByArray.some(id => id.toString() === userId.toString());
+          const hasLikedAsAnon = likedByArray.some(id => id.toString() === anonymousUserId.toString());
+          const hasLiked = hasLikedAsAuth || hasLikedAsAnon;
+          
+          return {
+            ...postData,
+            userLiked: hasLiked
+          };
+        });
+        
+        const responseData = {
+          posts: postsWithUserLiked,
+          pagination: cached.data.pagination
+        };
+        
+        console.log(`Returning cached posts with fresh userLiked - Total time: ${Date.now() - startTime}ms`);
+        return res.json(responseData);
       }
       postsCache.delete(cacheKey);
     }
@@ -300,20 +327,6 @@ export const getPublishedPosts = async (req, res) => {
     });
     console.log(`Main query took: ${Date.now() - queryStart}ms`);
 
-    // Add userLiked field to each post
-    const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
-    const processingStart = Date.now();
-    const postsWithUserLiked = posts.map(post => {
-      const postData = post.toJSON();
-      const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
-      const hasLiked = likedByArray.some(id => id.toString() === userId.toString());
-      return {
-        ...postData,
-        userLiked: hasLiked
-      };
-    });
-    console.log(`Post processing took: ${Date.now() - processingStart}ms`);
-
     // Calculate total count and pagination info
     if (totalCount === null) {
       // For first page, assume more data exists if we got a full page
@@ -325,6 +338,48 @@ export const getPublishedPosts = async (req, res) => {
 
     console.log(`Found ${posts.length} published posts (page ${page}/${totalPages}) - Total time: ${Date.now() - startTime}ms`);
     
+    // Create response data WITHOUT userLiked for caching (avoid user-specific cache pollution)
+    const cacheableResponseData = {
+      posts: posts.map(post => post.toJSON()),
+      pagination: {
+        currentPage: page,
+        totalPages: page === 1 ? (hasMore ? 99 : 1) : totalPages, // Conservative estimate for first page
+        totalCount: page === 1 ? (hasMore ? 847 : posts.length) : totalCount, // Use known total for first page
+        hasMore: hasMore,
+        limit: limit
+      }
+    };
+    
+    // Cache first page for fast subsequent loads (WITHOUT userLiked field to avoid user-specific cache pollution)
+    if (page === 1) {
+      postsCache.set(cacheKey, {
+        data: cacheableResponseData,
+        timestamp: Date.now()
+      });
+    }
+
+    // Add userLiked field to each post for current user (always calculated fresh)
+    const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+    const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+    const processingStart = Date.now();
+    const postsWithUserLiked = (page === 1 && postsCache.has(cacheKey) && !bustCache ? 
+      cacheableResponseData.posts : 
+      posts.map(post => post.toJSON())
+    ).map(postData => {
+      const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
+      
+      // Check if user has liked as authenticated user OR as anonymous user
+      const hasLikedAsAuth = req.user && likedByArray.some(id => id.toString() === userId.toString());
+      const hasLikedAsAnon = likedByArray.some(id => id.toString() === anonymousUserId.toString());
+      const hasLiked = hasLikedAsAuth || hasLikedAsAnon;
+      
+      return {
+        ...postData,
+        userLiked: hasLiked
+      };
+    });
+    console.log(`Post processing took: ${Date.now() - processingStart}ms`);
+
     const responseData = {
       posts: postsWithUserLiked,
       pagination: {
@@ -335,14 +390,6 @@ export const getPublishedPosts = async (req, res) => {
         limit: limit
       }
     };
-    
-    // Cache first page for fast subsequent loads
-    if (page === 1) {
-      postsCache.set(cacheKey, {
-        data: responseData,
-        timestamp: Date.now()
-      });
-    }
     
     res.json(responseData);
   } catch (err) {
@@ -441,9 +488,15 @@ export const getPostById = async (req, res) => {
 
     // Add userLiked field to the post
     const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+    const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
     const postData = post.toJSON();
     const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
-    const hasLiked = likedByArray.some(id => id.toString() === userId.toString());
+    
+    // Check if user has liked as authenticated user OR as anonymous user
+    const hasLikedAsAuth = req.user && likedByArray.some(id => id.toString() === userId.toString());
+    const hasLikedAsAnon = likedByArray.some(id => id.toString() === anonymousUserId.toString());
+    const hasLiked = hasLikedAsAuth || hasLikedAsAnon;
+    
     const postWithUserLiked = {
       ...postData,
       userLiked: hasLiked

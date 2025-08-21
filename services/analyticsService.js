@@ -104,12 +104,18 @@ class AnalyticsService {
         scrollDepth
       } = data;
 
+      console.log('Recording page view with data:', {
+        postId, url: url?.substring(0, 100) + '...', title, 
+        visitorId: data.visitorId, sessionId
+      });
+
       // Parse user agent
       const deviceInfo = this.parseUserAgent(userAgent);
       const isBot = this.isBot(userAgent);
       
       // Skip bot traffic for analytics
       if (isBot) {
+        console.log('Skipping bot traffic:', userAgent?.substring(0, 100));
         return null;
       }
 
@@ -117,6 +123,7 @@ class AnalyticsService {
       let visitorId = data.visitorId;
       if (!visitorId) {
         visitorId = this.generateVisitorId(ipAddress, userAgent);
+        console.log('Generated new visitor ID:', visitorId);
       }
 
       // Determine traffic source
@@ -126,16 +133,25 @@ class AnalyticsService {
       // Truncate referrer URL if it's too long for database
       const truncatedReferrer = referrer ? this.truncateString(referrer, 255) : null;
 
+      // Validate required fields before database insert
+      if (!url) {
+        throw new Error('URL is required for page view tracking');
+      }
+
+      if (url.length > 255) {
+        throw new Error('URL too long for database storage');
+      }
+
       // Create page view record
       const pageView = await PageView.create({
         postId,
         url,
-        title,
+        title: title ? this.truncateString(title, 255) : null,
         visitorId,
         sessionId,
         userId,
         ipAddress,
-        userAgent,
+        userAgent: userAgent ? this.truncateString(userAgent, 1000) : null,
         browser: deviceInfo.browser,
         browserVersion: deviceInfo.browserVersion,
         operatingSystem: deviceInfo.operatingSystem,
@@ -143,11 +159,13 @@ class AnalyticsService {
         referrer: truncatedReferrer,
         referrerDomain,
         trafficSource,
-        timeOnPage,
-        scrollDepth,
+        timeOnPage: timeOnPage || 0,
+        scrollDepth: scrollDepth || 0,
         viewHour: new Date().getHours(),
         isBot
       });
+
+      console.log('Successfully created page view with ID:', pageView.id);
 
       // Update or create visitor record
       await this.updateVisitor(visitorId, {
@@ -178,6 +196,7 @@ class AnalyticsService {
       return pageView;
     } catch (error) {
       console.error('Error recording page view:', error);
+      console.error('Data that caused error:', JSON.stringify(data, null, 2));
       throw error;
     }
   }

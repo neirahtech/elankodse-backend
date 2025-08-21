@@ -63,6 +63,9 @@ router.post('/:id/toggle-like', async (req, res) => {
     
     await post.save();
     
+    // Clear cache to ensure consistency between published posts and individual post APIs
+    clearPostsCache();
+    
     // Verify the save worked by fetching the post again
     // Use the same lookup method that worked initially
     let savedPost;
@@ -143,6 +146,9 @@ router.post('/:id/like', auth, async (req, res) => {
   post.likedBy.push(userId);
   await post.save();
     
+  // Clear cache to ensure consistency between APIs
+  clearPostsCache();
+    
   res.json({ likes: post.likes });
   } catch (error) {
     console.error('Error liking post:', error);
@@ -153,53 +159,66 @@ router.post('/:id/like', auth, async (req, res) => {
 // View a post (increment views, prevent abuse)
 router.post('/:id/view', async (req, res) => {
   try {
-  const post = await Post.findOne({ where: { postId: req.params.id } });
-  if (!post) return res.status(404).json({ error: 'Post not found' });
-  
-  // Ensure viewedBy is always an array
-  if (!Array.isArray(post.viewedBy)) {
-    post.viewedBy = [];
-  }
-  
-  const userId = req.user ? req.user.id : null;
-  const ip = req.ip;
-  const now = new Date();
-  let canIncrement = true;
-  
-  // Check if user or IP has viewed in last 6 hours
-  if (userId) {
-    const last = post.viewedBy.find(v => v.user && v.user.toString() === userId);
-    if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
-  } else {
-    const last = post.viewedBy.find(v => v.ip === ip);
-    if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
-  }
-  
-  if (canIncrement) {
+    const postId = req.params.id;
+    console.log('Attempting to increment views for post ID:', postId);
+    
+    const post = await Post.findOne({ where: { postId: postId } });
+    if (!post) {
+      console.warn('Post not found for view increment, ID:', postId);
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    console.log('Found post for view increment:', { postId: post.postId, title: post.title?.substring(0, 50) + '...' });
+    
+    // Ensure viewedBy is always an array
+    if (!Array.isArray(post.viewedBy)) {
+      post.viewedBy = [];
+    }
+    
+    const userId = req.user ? req.user.id : null;
+    const ip = req.ip;
+    const now = new Date();
+    let canIncrement = true;
+    
+    // Check if user or IP has viewed in last 6 hours
+    if (userId) {
+      const last = post.viewedBy.find(v => v.user && v.user.toString() === userId);
+      if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
+    } else {
+      const last = post.viewedBy.find(v => v.ip === ip);
+      if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
+    }
+    
+    if (canIncrement) {
       post.views = (post.views || 0) + 1;
       if (!post.viewedBy) post.viewedBy = [];
       
-    if (userId) {
-      const idx = post.viewedBy.findIndex(v => v.user && v.user.toString() === userId);
+      if (userId) {
+        const idx = post.viewedBy.findIndex(v => v.user && v.user.toString() === userId);
         if (idx >= 0) {
           post.viewedBy[idx].lastViewed = now;
         } else {
           post.viewedBy.push({ user: userId, lastViewed: now });
         }
-    } else {
-      const idx = post.viewedBy.findIndex(v => v.ip === ip);
+      } else {
+        const idx = post.viewedBy.findIndex(v => v.ip === ip);
         if (idx >= 0) {
           post.viewedBy[idx].lastViewed = now;
         } else {
           post.viewedBy.push({ ip, lastViewed: now });
         }
+      }
+      
+      await post.save();
+      console.log('Successfully incremented view count for post:', postId, 'New count:', post.views);
+    } else {
+      console.log('View increment skipped (recent view) for post:', postId);
     }
-    await post.save();
-  }
-  
-  res.json({ views: post.views || 0 });
+    
+    res.json({ views: post.views || 0 });
   } catch (error) {
-    console.error('Error recording view:', error);
+    console.error('Error recording view for post ID:', req.params.id);
+    console.error('Error details:', error);
     res.status(500).json({ error: 'Failed to record view' });
   }
 });
@@ -220,6 +239,9 @@ router.delete('/:id/like', auth, async (req, res) => {
     post.likes = Math.max(0, (post.likes || 0) - 1);
     post.likedBy = post.likedBy.filter(id => id.toString() !== userId.toString());
   await post.save();
+    
+  // Clear cache to ensure consistency between APIs
+  clearPostsCache();
     
   res.json({ likes: post.likes });
   } catch (error) {
