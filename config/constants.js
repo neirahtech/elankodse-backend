@@ -62,6 +62,7 @@ export const PRODUCTION_CORS_ORIGINS = [
   PRODUCTION_URLS.FRONTEND_WWW,                     // https://www.elankodse.com  
   PRODUCTION_URLS.FRONTEND_DIGITALOCEAN,            // https://digitalocean.elankodse.com
   PRODUCTION_URLS.BACKEND_API,                      // https://api.elankodse.com
+  'https://test.elankodse.com',                     // Test/staging environment
   'https://elankodse-backend.onrender.com',         // Legacy Render.com URL
   'http://localhost:8085'                           // Local backend for mixed environments
 ];
