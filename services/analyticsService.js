@@ -471,7 +471,10 @@ class AnalyticsService {
   // Get top posts by views (Enhanced with likes and comments - Blogger style)
   async getTopPosts(limit = 10, period = '30days') {
     try {
+      console.log(`📊 Analytics: Getting top posts (limit: ${limit}, period: ${period})`);
+      
       const conditions = this.getPeriodConditions(period);
+      console.log('📊 Analytics: Period conditions:', conditions);
       
       // Get view counts from analytics
       const postViews = await PageView.findAll({
@@ -489,11 +492,56 @@ class AnalyticsService {
         limit: limit * 2 // Get more to filter out any missing posts
       });
 
+      console.log(`📊 Analytics: Found ${postViews.length} posts with analytics data for period ${period}`);
+
       // Get the post IDs
       const postIds = postViews.map(pv => pv.postId);
+      console.log('📊 Analytics: PostIds from analytics:', postIds);
       
+      // ENHANCED: If no analytics data for the period, use all posts with their existing stats
       if (postIds.length === 0) {
-        return [];
+        console.log('📊 No analytics data found for period, using all published posts with existing stats');
+        
+        // Get all published posts with their existing views, likes, comments
+        const allPosts = await Post.findAll({
+          where: {
+            status: 'published',
+            hidden: false
+          },
+          attributes: ['postId', 'title', 'urlSlug', 'publishedAt', 'likes', 'comments', 'views', 'category'],
+          order: [
+            // Sort by engagement score: views + likes*2 + comments*5
+            [sequelize.literal('(COALESCE(views, 0) + COALESCE(likes, 0) * 2 + COALESCE(comments, 0) * 5)'), 'DESC'],
+            ['views', 'DESC'], // Secondary sort by views
+            ['publishedAt', 'DESC'] // Tertiary sort by date
+          ],
+          limit
+        });
+
+        console.log(`📊 Found ${allPosts.length} published posts for analytics`);
+        
+        if (allPosts.length === 0) {
+          console.log('📊 No published posts found in database');
+          return [];
+        }
+        
+        const result = allPosts.map(post => ({
+          postId: post.postId,
+          title: post.title,
+          urlSlug: post.urlSlug,
+          publishedAt: post.publishedAt,
+          category: post.category,
+          views: parseInt(post.views || 0),
+          likes: parseInt(post.likes || 0),
+          comments: parseInt(post.comments || 0),
+          // Calculate engagement score (views + likes*2 + comments*5)
+          engagementScore: parseInt(post.views || 0) + parseInt(post.likes || 0) * 2 + parseInt(post.comments || 0) * 5
+        }));
+        
+        console.log(`📊 Returning ${result.length} posts with engagement data`);
+        console.log('📊 Sample post:', result[0] || 'None');
+        
+        return result;
       }
 
       // Get full post details with likes and comments from the Posts table
@@ -506,6 +554,39 @@ class AnalyticsService {
         attributes: ['postId', 'title', 'urlSlug', 'publishedAt', 'likes', 'comments', 'views', 'category'],
         limit
       });
+
+      console.log(`📊 Analytics: Found ${posts.length} matching posts in Posts table`);
+      if (posts.length === 0 && postIds.length > 0) {
+        console.log('📊 Analytics: No posts found for IDs:', postIds);
+        console.log('📊 Analytics: Falling back to all published posts');
+        
+        // Fallback to all published posts
+        const allPosts = await Post.findAll({
+          where: {
+            status: 'published',
+            hidden: false
+          },
+          attributes: ['postId', 'title', 'urlSlug', 'publishedAt', 'likes', 'comments', 'views', 'category'],
+          order: [
+            [sequelize.literal('(COALESCE(views, 0) + COALESCE(likes, 0) * 2 + COALESCE(comments, 0) * 5)'), 'DESC'],
+            ['views', 'DESC'],
+            ['publishedAt', 'DESC']
+          ],
+          limit
+        });
+        
+        return allPosts.map(post => ({
+          postId: post.postId,
+          title: post.title,
+          urlSlug: post.urlSlug,
+          publishedAt: post.publishedAt,
+          category: post.category,
+          views: parseInt(post.views || 0),
+          likes: parseInt(post.likes || 0),
+          comments: parseInt(post.comments || 0),
+          engagementScore: parseInt(post.views || 0) + parseInt(post.likes || 0) * 2 + parseInt(post.comments || 0) * 5
+        }));
+      }
 
       // Combine analytics views with post data
       const combinedData = posts.map(post => {

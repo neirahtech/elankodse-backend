@@ -215,11 +215,41 @@ router.get('/post/:postId', auth, async (req, res) => {
   }
 });
 
+// Temporary test route (remove in production)
+router.get('/test-posts', async (req, res) => {
+  try {
+    console.log('📊 Test Analytics: /test-posts called');
+    
+    // Set proper UTF-8 headers for Tamil text
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    
+    const { limit = 20, period = '30days' } = req.query;
+    console.log(`📊 Test Analytics: Getting top posts (limit: ${limit}, period: ${period})`);
+    
+    const topPosts = await analyticsService.getTopPosts(parseInt(limit), period);
+    console.log(`📊 Test Analytics: Retrieved ${topPosts.length} posts`);
+    
+    res.json(topPosts);
+  } catch (error) {
+    console.error('Error getting test top posts:', error);
+    res.status(500).json({ error: 'Failed to get test top posts', details: error.message });
+  }
+});
+
 // Get top posts (protected route)
 router.get('/top-posts', auth, async (req, res) => {
   try {
+    console.log('📊 Analytics API: /top-posts called');
+    
+    // Set proper UTF-8 headers for Tamil text
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    
     const { limit = 20, period = '30days' } = req.query;
+    console.log(`📊 Analytics API: Getting top posts (limit: ${limit}, period: ${period})`);
+    
     const topPosts = await analyticsService.getTopPosts(parseInt(limit), period);
+    console.log(`📊 Analytics API: Retrieved ${topPosts.length} posts`);
+    
     res.json(topPosts);
   } catch (error) {
     console.error('Error getting top posts:', error);
