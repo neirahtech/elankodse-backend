@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import config from './config/environment.js';
@@ -61,6 +62,26 @@ connectDB().then(async () => {
   }
 
   const app = express();
+
+  // Configure trust proxy for production deployment (Render, Heroku, etc.)
+  // This ensures req.ip gets the real client IP, not the proxy IP
+  if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1); // Trust first proxy
+    console.log('🔧 Trust proxy enabled for production environment');
+  }
+
+  // Enable gzip compression for better performance
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+    level: 6,
+    threshold: 1024,
+    memLevel: 8
+  }));
 
   // Debug CORS configuration
   const allowedOrigins = getAllowedOrigins();

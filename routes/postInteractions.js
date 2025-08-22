@@ -23,8 +23,33 @@ router.post('/:id/toggle-like', async (req, res) => {
     console.log('🔍 Post found:', post ? `${post.title} (likes: ${post.likes})` : 'null');
     if (!post) return res.status(404).json({ error: 'Post not found' });
     
-    // For anonymous users, use a combination of IP and user agent for better consistency
-    const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+    // For anonymous users, create a more robust identifier
+    // Use combination of IP, User-Agent, and other headers for better uniqueness in production
+    let userId;
+    if (req.user) {
+      userId = req.user.id;
+    } else {
+      // Get real client IP (handles proxy situations)
+      const clientIP = req.ip || 
+                      req.connection.remoteAddress || 
+                      req.socket.remoteAddress ||
+                      (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                      req.headers['x-real-ip'] ||
+                      'unknown';
+      
+      const userAgent = req.get('User-Agent')?.slice(0, 100) || 'unknown';
+      const acceptLanguage = req.get('Accept-Language')?.slice(0, 20) || '';
+      
+      // Create a more unique identifier for anonymous users
+      userId = `anon_${clientIP}_${Buffer.from(userAgent + acceptLanguage).toString('base64').slice(0, 20)}`;
+      
+      console.log('🔍 Anonymous user identification:', {
+        clientIP,
+        userAgent: userAgent.slice(0, 30) + '...',
+        generatedId: userId.slice(0, 30) + '...'
+      });
+    }
     
     // Ensure likedBy is an array
     let likedBy = post.likedBy || [];
@@ -34,10 +59,10 @@ router.post('/:id/toggle-like', async (req, res) => {
     
     console.log('🔍 Like toggle debug:', {
       postId: req.params.id,
-      userId,
+      userId: userId.slice(0, 30) + '...', // Truncate for security
+      isAuthenticated: !!req.user,
       currentLikes: post.likes,
-      currentLikedBy: likedBy,
-      userAgent: req.get('User-Agent')?.slice(0, 50)
+      currentLikedBy: likedBy.length + ' users'
     });
     
     const hasLiked = likedBy.some(id => id.toString() === userId.toString());
@@ -58,8 +83,11 @@ router.post('/:id/toggle-like', async (req, res) => {
     
     console.log('🔍 After operation:', {
       newLikes: post.likes,
-      newLikedBy: post.likedBy
+      newLikedBy: post.likedBy.length + ' users'
     });
+    
+    // Clean up any invalid entries in likedBy array (optional maintenance)
+    post.likedBy = post.likedBy.filter(id => id && id.toString().length > 0);
     
     await post.save();
     
@@ -176,17 +204,44 @@ router.post('/:id/view', async (req, res) => {
     }
     
     const userId = req.user ? req.user.id : null;
-    const ip = req.ip;
+    
+    // Get real client IP (handles proxy situations)
+    const clientIP = req.ip || 
+                    req.connection.remoteAddress || 
+                    req.socket.remoteAddress ||
+                    (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                    req.headers['x-real-ip'] ||
+                    'unknown';
+    
+    // For anonymous users, create unique identifier like in like functionality
+    const anonymousId = userId ? null : `anon_${clientIP}_${Buffer.from((req.get('User-Agent') || '') + (req.get('Accept-Language') || '')).toString('base64').slice(0, 20)}`;
+    
+    console.log('🔍 View tracking debug:', {
+      postId,
+      userId: userId || 'anonymous',
+      clientIP,
+      anonymousId: anonymousId?.slice(0, 30) + '...' || 'N/A'
+    });
+    
     const now = new Date();
     let canIncrement = true;
     
-    // Check if user or IP has viewed in last 6 hours
+    // Check if user or anonymous identifier has viewed in last 6 hours
     if (userId) {
-      const last = post.viewedBy.find(v => v.user && v.user.toString() === userId);
-      if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
+      // For authenticated users, check by user ID
+      const last = post.viewedBy.find(v => v.user && v.user.toString() === userId.toString());
+      if (last && now - new Date(last.lastViewed) < 6*60*60*1000) {
+        canIncrement = false;
+        console.log('🔍 View increment blocked - authenticated user viewed recently');
+      }
     } else {
-      const last = post.viewedBy.find(v => v.ip === ip);
-      if (last && now - new Date(last.lastViewed) < 6*60*60*1000) canIncrement = false;
+      // For anonymous users, check by the unique anonymous identifier
+      const last = post.viewedBy.find(v => v.anonymousId === anonymousId);
+      if (last && now - new Date(last.lastViewed) < 6*60*60*1000) {
+        canIncrement = false;
+        console.log('🔍 View increment blocked - anonymous user viewed recently');
+      }
     }
     
     if (canIncrement) {
@@ -194,25 +249,31 @@ router.post('/:id/view', async (req, res) => {
       if (!post.viewedBy) post.viewedBy = [];
       
       if (userId) {
-        const idx = post.viewedBy.findIndex(v => v.user && v.user.toString() === userId);
+        // For authenticated users, store by user ID
+        const idx = post.viewedBy.findIndex(v => v.user && v.user.toString() === userId.toString());
         if (idx >= 0) {
           post.viewedBy[idx].lastViewed = now;
         } else {
           post.viewedBy.push({ user: userId, lastViewed: now });
         }
       } else {
-        const idx = post.viewedBy.findIndex(v => v.ip === ip);
+        // For anonymous users, store by anonymous identifier
+        const idx = post.viewedBy.findIndex(v => v.anonymousId === anonymousId);
         if (idx >= 0) {
           post.viewedBy[idx].lastViewed = now;
         } else {
-          post.viewedBy.push({ ip, lastViewed: now });
+          post.viewedBy.push({ anonymousId, ip: clientIP, lastViewed: now });
         }
       }
       
+      // Clean up old entries (older than 7 days) to prevent array from growing too large
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      post.viewedBy = post.viewedBy.filter(v => new Date(v.lastViewed) > sevenDaysAgo);
+      
       await post.save();
-      console.log('Successfully incremented view count for post:', postId, 'New count:', post.views);
+      console.log('✅ Successfully incremented view count for post:', postId, 'New count:', post.views);
     } else {
-      console.log('View increment skipped (recent view) for post:', postId);
+      console.log('⏭️  View increment skipped (recent view) for post:', postId);
     }
     
     res.json({ views: post.views || 0 });

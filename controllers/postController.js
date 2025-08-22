@@ -410,107 +410,90 @@ export const getPublishedPosts = async (req, res) => {
 };
 
 export const getPostById = async (req, res) => {
+  const startTime = Date.now();
   try {
     const { identifier } = req.params;
     
     console.log('🔍 Fetching post with identifier:', identifier);
-    console.log('🔐 User context:', {
-      authenticated: !!req.user,
-      isAuthor: req.user?.isAuthor,
-      userId: req.user?.id
-    });
     
     if (!identifier) {
       console.log('❌ No identifier provided');
       return res.status(400).json({ error: 'Post ID is required' });
     }
 
-    // Try to find by URL slug first, then by postId, then by numeric id
-    let whereClause = { urlSlug: identifier };
+    // Performance: Single optimized query with all search conditions
+    const { Op } = await import('sequelize');
+    const numericId = parseInt(identifier);
+    const isNumeric = !isNaN(numericId);
+    
+    // Build where clause with OR conditions for all identifier types
+    let whereClause = {
+      [Op.or]: [
+        { urlSlug: identifier },
+        { postId: identifier }
+      ],
+      status: 'published' // Only return published posts
+    };
+    
+    // Add numeric ID search if valid number
+    if (isNumeric) {
+      whereClause[Op.or].push({ id: numericId });
+    }
+    
     // Add hidden filter for non-authors
     if (!req.user || !req.user.isAuthor) {
       whereClause.hidden = false;
     }
     
-    console.log('🔍 Searching by URL slug with clause:', whereClause);
-    let post = await Post.findOne({ 
+    console.log('🔍 Executing optimized single query');
+    const post = await Post.findOne({ 
       where: whereClause,
       attributes: [
-        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden', 'urlSlug', 'additionalImages'
+        'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 
+        'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 
+        'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 
+        'hidden', 'urlSlug', 'additionalImages'
       ]
     });
-    console.log('📝 Search by URL slug result:', post ? `Found: ${post.title}` : 'Not found');
-    
-    if (!post) {
-      // Try by postId
-      whereClause = { postId: identifier };
-      // Add hidden filter for non-authors
-      if (!req.user || !req.user.isAuthor) {
-        whereClause.hidden = false;
-      }
-      
-      console.log('🔍 Searching by postId with clause:', whereClause);
-      post = await Post.findOne({ 
-        where: whereClause,
-        attributes: [
-          'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden', 'urlSlug', 'additionalImages'
-        ]
-      });
-      console.log('📝 Search by postId result:', post ? `Found: ${post.title}` : 'Not found');
-    }
-    
-    if (!post) {
-      // If not found by postId, try by numeric id
-      const numericId = parseInt(identifier);
-      console.log('🔍 Trying numeric ID:', numericId);
-      if (!isNaN(numericId)) {
-        const numericWhereClause = { id: numericId };
-        // Add hidden filter for non-authors
-        if (!req.user || !req.user.isAuthor) {
-          numericWhereClause.hidden = false;
-        }
-        
-        console.log('🔍 Searching by numeric ID with clause:', numericWhereClause);
-        post = await Post.findOne({
-          where: numericWhereClause,
-          attributes: [
-            'id', 'postId', 'title', 'date', 'category', 'coverImage', 'authorId', 'author', 'comments', 'likes', 'updatedAt', 'excerpt', 'likedBy', 'status', 'subtitle', 'content', 'tags', 'views', 'publishedAt', 'hidden', 'urlSlug', 'additionalImages'
-          ]
-        });
-        console.log('📝 Search by numeric ID result:', post ? `Found: ${post.title}` : 'Not found');
-      }
-    }
 
     if (!post) {
-      console.log('Post not found for identifier:', identifier);
+      console.log(`❌ Post not found for identifier: ${identifier} (${Date.now() - startTime}ms)`);
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    // Add userLiked field to the post
-    const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
-    const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+    // Performance: Optimize user liked calculation
     const postData = post.toJSON();
     const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
     
-    // Check if user has liked as authenticated user OR as anonymous user
-    const hasLikedAsAuth = req.user && likedByArray.some(id => id.toString() === userId.toString());
-    const hasLikedAsAnon = likedByArray.some(id => id.toString() === anonymousUserId.toString());
-    const hasLiked = hasLikedAsAuth || hasLikedAsAnon;
+    let hasLiked = false;
+    if (likedByArray.length > 0) {
+      const userId = req.user ? req.user.id.toString() : null;
+      const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
+      
+      hasLiked = likedByArray.some(id => {
+        const idStr = id.toString();
+        return (userId && idStr === userId) || idStr === anonymousUserId;
+      });
+    }
     
     const postWithUserLiked = {
       ...postData,
       userLiked: hasLiked
     };
 
-    console.log('Post found:', post.title);
+    const duration = Date.now() - startTime;
+    console.log(`✅ Post found: ${post.title} (${duration}ms)`);
+    
+    // Add performance header for monitoring
+    res.set('X-Response-Time', `${duration}ms`);
     res.json(postWithUserLiked);
+    
   } catch (err) {
-    console.error('Error fetching post by id:', err);
+    const duration = Date.now() - startTime;
+    console.error(`❌ Error fetching post by id (${duration}ms):`, err);
     res.status(500).json({ error: 'Failed to fetch post' });
   }
-}; 
-
-export const getCategories = async (req, res) => {
+};export const getCategories = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;

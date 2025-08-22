@@ -107,6 +107,15 @@ const Post = sequelize.define('Post', {
     {
       fields: ['status', 'hidden', 'publishedAt']
     },
+    // Optimized index for post detail page lookups
+    {
+      name: 'post_detail_lookup',
+      fields: ['urlSlug', 'status', 'hidden']
+    },
+    {
+      name: 'post_detail_lookup_id',
+      fields: ['postId', 'status', 'hidden']
+    },
     // Individual indexes for performance
     {
       fields: ['publishedYear', 'publishedMonth']

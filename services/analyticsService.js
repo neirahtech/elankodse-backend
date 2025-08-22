@@ -16,10 +16,21 @@ class AnalyticsService {
   }
 
   // Generate a unique visitor ID
-  generateVisitorId(ip, userAgent) {
-    const hash = crypto.createHash('md5');
-    hash.update(`${ip}-${userAgent}-${Date.now()}`);
-    return hash.digest('hex');
+  generateVisitorId(identityFactors, userAgent) {
+    try {
+      const hash = crypto.createHash('sha256');
+      hash.update(identityFactors);
+      const baseHash = hash.digest('hex').substring(0, 16);
+      
+      // Add timestamp component to ensure uniqueness while maintaining some consistency
+      const timeComponent = Math.floor(Date.now() / (1000 * 60 * 60 * 6)); // 6-hour windows
+      
+      return `visitor_${baseHash}_${timeComponent}`;
+    } catch (error) {
+      console.warn('Error generating visitor ID, using fallback:', error);
+      // Fallback to simpler method
+      return `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
   }
 
   // Detect if request is from a bot
@@ -106,7 +117,9 @@ class AnalyticsService {
 
       console.log('Recording page view with data:', {
         postId, url: url?.substring(0, 100) + '...', title, 
-        visitorId: data.visitorId, sessionId
+        visitorId: data.visitorId, sessionId, 
+        ipAddress: ipAddress?.substring(0, 10) + '...',
+        environment: process.env.NODE_ENV
       });
 
       // Parse user agent
@@ -119,11 +132,19 @@ class AnalyticsService {
         return null;
       }
 
-      // Generate or get visitor ID
+      // Enhanced visitor ID generation for production
       let visitorId = data.visitorId;
       if (!visitorId) {
-        visitorId = this.generateVisitorId(ipAddress, userAgent);
-        console.log('Generated new visitor ID:', visitorId);
+        // In production, create a more robust visitor ID using multiple factors
+        const identityFactors = [
+          ipAddress,
+          userAgent?.substring(0, 200), // Truncate to avoid issues
+          // Add more entropy in production
+          process.env.NODE_ENV === 'production' ? Date.now().toString() : ''
+        ].filter(Boolean).join('-');
+        
+        visitorId = this.generateVisitorId(identityFactors, userAgent);
+        console.log('Generated new visitor ID for production:', visitorId.substring(0, 10) + '...');
       }
 
       // Determine traffic source
@@ -140,6 +161,51 @@ class AnalyticsService {
 
       if (url.length > 255) {
         throw new Error('URL too long for database storage');
+      }
+
+      // Check for duplicate page views - Extended logic for same session/visitor
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+      const recentPageView = await PageView.findOne({
+        where: {
+          [Op.or]: [
+            // Same visitor, same URL within 5 minutes (prevents rapid refreshes)
+            {
+              visitorId,
+              url,
+              viewDate: {
+                [Op.gte]: fiveMinutesAgo
+              }
+            },
+            // Same session, same URL within 5 minutes (covers session-based tracking)
+            sessionId ? {
+              sessionId,
+              url,
+              viewDate: {
+                [Op.gte]: fiveMinutesAgo
+              }
+            } : null
+          ].filter(Boolean) // Remove null values
+        },
+        order: [['viewDate', 'DESC']]
+      });
+
+      if (recentPageView) {
+        const timeSinceLastView = Date.now() - recentPageView.viewDate.getTime();
+        console.log('Skipping duplicate page view within 5 minutes:', {
+          visitorId,
+          sessionId,
+          url: url.substring(0, 50) + '...',
+          timeSinceLastView: Math.round(timeSinceLastView / 1000) + 's'
+        });
+        
+        // Update the existing page view's timestamp to show recent activity
+        await recentPageView.update({
+          viewDate: new Date(),
+          timeOnPage: timeOnPage || recentPageView.timeOnPage,
+          scrollDepth: scrollDepth || recentPageView.scrollDepth
+        });
+        
+        return recentPageView; // Return the updated page view instead of creating a duplicate
       }
 
       // Create page view record
@@ -183,14 +249,15 @@ class AnalyticsService {
         await this.updatePostViews(postId);
       }
 
-      // Update daily analytics
+      // Update daily analytics with enhanced deduplication
       await this.updateDailyAnalytics(postId, {
         deviceType: deviceInfo.deviceType,
         trafficSource,
         visitorId,
         browser: deviceInfo.browser,
         operatingSystem: deviceInfo.operatingSystem,
-        viewHour: new Date().getHours()
+        viewHour: new Date().getHours(),
+        sessionId: sessionId || visitorId  // Add session info for better deduplication
       });
 
       return pageView;
