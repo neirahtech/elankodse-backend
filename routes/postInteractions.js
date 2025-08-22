@@ -325,4 +325,31 @@ router.delete('/:id/like', auth, async (req, res) => {
   }
 });
 
+// Debug endpoint to understand user identification issues
+router.get('/debug/user-id', (req, res) => {
+  try {
+    const debugInfo = getUserIdentificationDebug(req);
+    const userId = getUserIdentifier(req);
+    
+    res.json({
+      userId: userId,
+      debug: debugInfo,
+      headers: {
+        userAgent: req.get('User-Agent'),
+        acceptLanguage: req.get('Accept-Language'),
+        xForwardedFor: req.get('X-Forwarded-For'),
+        xRealIp: req.get('X-Real-IP')
+      },
+      ip: req.ip,
+      connection: {
+        remoteAddress: req.connection?.remoteAddress,
+        socketRemoteAddress: req.socket?.remoteAddress
+      }
+    });
+  } catch (error) {
+    console.error('Debug endpoint error:', error);
+    res.status(500).json({ error: 'Debug failed' });
+  }
+});
+
 export default router; 

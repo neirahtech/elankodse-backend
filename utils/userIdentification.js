@@ -15,21 +15,45 @@ export const getUserIdentifier = (req) => {
     return req.user.id.toString();
   } else {
     // For anonymous users, create a consistent identifier
-    // Get real client IP (handles proxy situations)
-    const clientIP = req.ip || 
-                    req.connection.remoteAddress || 
-                    req.socket.remoteAddress ||
-                    (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
-                    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                    req.headers['x-real-ip'] ||
-                    'unknown';
+    // Priority order for IP detection (production-ready)
+    let clientIP = 'unknown';
+    
+    // First try Cloudflare headers (most common in production)
+    if (req.headers['cf-connecting-ip']) {
+      clientIP = req.headers['cf-connecting-ip'];
+    }
+    // Then try standard forwarded headers
+    else if (req.headers['x-forwarded-for']) {
+      clientIP = req.headers['x-forwarded-for'].split(',')[0].trim();
+    }
+    else if (req.headers['x-real-ip']) {
+      clientIP = req.headers['x-real-ip'];
+    }
+    // Fallback to Express req.ip (which should handle most proxy configurations)
+    else if (req.ip) {
+      clientIP = req.ip;
+    }
+    // Last resort: direct connection info
+    else {
+      clientIP = req.connection?.remoteAddress || 
+                req.socket?.remoteAddress ||
+                (req.connection?.socket ? req.connection.socket.remoteAddress : null) ||
+                'unknown';
+    }
+    
+    // Clean up IPv6-mapped IPv4 addresses and normalize
+    clientIP = clientIP.replace(/^::ffff:/, '').substring(0, 45);
     
     const userAgent = req.get('User-Agent')?.slice(0, 100) || 'unknown';
     const acceptLanguage = req.get('Accept-Language')?.slice(0, 20) || '';
     
-    // Create a consistent identifier for anonymous users
-    // Format: anon_[IP]_[base64(userAgent+acceptLanguage)]
-    return `anon_${clientIP}_${Buffer.from(userAgent + acceptLanguage).toString('base64').slice(0, 20)}`;
+    // Create a more stable identifier for anonymous users
+    // Use a consistent hash to avoid base64 variations
+    const fingerprint = `${userAgent}|${acceptLanguage}`.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const hash = Buffer.from(fingerprint).toString('base64').slice(0, 16);
+    
+    // Format: anon_[IP]_[hash]
+    return `anon_${clientIP}_${hash}`;
   }
 };
 
@@ -64,15 +88,27 @@ export const getUserIdentificationDebug = (req) => {
       userType: 'authenticated'
     };
   } else {
-    const clientIP = req.ip || 'unknown';
-    const userAgent = req.get('User-Agent')?.slice(0, 30) || 'unknown';
+    // Detailed IP detection for debugging
+    const ipSources = {
+      cfConnectingIp: req.headers['cf-connecting-ip'],
+      xForwardedFor: req.headers['x-forwarded-for'],
+      xRealIp: req.headers['x-real-ip'],
+      reqIp: req.ip,
+      connectionRemoteAddress: req.connection?.remoteAddress,
+      socketRemoteAddress: req.socket?.remoteAddress
+    };
+    
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    const acceptLanguage = req.get('Accept-Language')?.slice(0, 20) || '';
     
     return {
       isAuthenticated: false,
-      userId: userId.slice(0, 30) + '...',
+      userId: userId,
       userType: 'anonymous',
-      clientIP,
-      userAgent: userAgent + '...'
+      ipSources,
+      userAgent: userAgent,
+      acceptLanguage: acceptLanguage,
+      fingerprint: `${userAgent}|${acceptLanguage}`.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 30)
     };
   }
 };
