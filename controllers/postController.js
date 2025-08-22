@@ -1,5 +1,6 @@
 import Post from '../models/Post.js';
 import { Category } from '../models/index.js';
+import { getUserIdentifier, hasUserLiked } from '../utils/userIdentification.js';
 
 // Simple in-memory cache for published posts (5 minute TTL)
 const postsCache = new Map();
@@ -241,17 +242,10 @@ export const getPublishedPosts = async (req, res) => {
         console.log(`Using cached posts data - calculating userLiked fresh for current user`);
         cachedPosts = cached.data.posts;
         
-        // Calculate userLiked for current user on cached data
-        const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
-        const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
-        
+        // Calculate userLiked for current user on cached data using consistent user identification
         const postsWithUserLiked = cachedPosts.map(postData => {
           const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
-          
-          // Check if user has liked as authenticated user OR as anonymous user
-          const hasLikedAsAuth = req.user && likedByArray.some(id => id.toString() === userId.toString());
-          const hasLikedAsAnon = likedByArray.some(id => id.toString() === anonymousUserId.toString());
-          const hasLiked = hasLikedAsAuth || hasLikedAsAnon;
+          const hasLiked = hasUserLiked(likedByArray, req);
           
           return {
             ...postData,
@@ -359,19 +353,13 @@ export const getPublishedPosts = async (req, res) => {
     }
 
     // Add userLiked field to each post for current user (always calculated fresh)
-    const userId = req.user ? req.user.id : `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
-    const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
     const processingStart = Date.now();
     const postsWithUserLiked = (page === 1 && postsCache.has(cacheKey) && !bustCache ? 
       cacheableResponseData.posts : 
       posts.map(post => post.toJSON())
     ).map(postData => {
       const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
-      
-      // Check if user has liked as authenticated user OR as anonymous user
-      const hasLikedAsAuth = req.user && likedByArray.some(id => id.toString() === userId.toString());
-      const hasLikedAsAnon = likedByArray.some(id => id.toString() === anonymousUserId.toString());
-      const hasLiked = hasLikedAsAuth || hasLikedAsAnon;
+      const hasLiked = hasUserLiked(likedByArray, req);
       
       return {
         ...postData,
@@ -462,20 +450,10 @@ export const getPostById = async (req, res) => {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    // Performance: Optimize user liked calculation
+    // Performance: Optimize user liked calculation using consistent user identification
     const postData = post.toJSON();
     const likedByArray = Array.isArray(postData.likedBy) ? postData.likedBy : [];
-    
-    let hasLiked = false;
-    if (likedByArray.length > 0) {
-      const userId = req.user ? req.user.id.toString() : null;
-      const anonymousUserId = `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'anonymous'}`;
-      
-      hasLiked = likedByArray.some(id => {
-        const idStr = id.toString();
-        return (userId && idStr === userId) || idStr === anonymousUserId;
-      });
-    }
+    const hasLiked = hasUserLiked(likedByArray, req);
     
     const postWithUserLiked = {
       ...postData,

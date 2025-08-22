@@ -61,7 +61,7 @@ router.post('/track', async (req, res) => {
       timeOnPage,
       scrollDepth,
       visitorId
-    });
+    }, req); // Pass req object for consistent user identification
 
     if (pageView) {
       res.json({ 

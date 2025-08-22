@@ -3,6 +3,7 @@ import { PageView, Visitor, Post } from '../models/index.js';
 import { Op } from 'sequelize';
 import { sequelize } from '../config/db.js';
 import UAParser from 'ua-parser-js';
+import { getUserIdentifier } from '../utils/userIdentification.js';
 import crypto from 'crypto';
 
 class AnalyticsService {
@@ -100,7 +101,7 @@ class AnalyticsService {
   }
 
   // Record a page view
-  async recordPageView(data) {
+  async recordPageView(data, req) {
     try {
       const {
         postId,
@@ -115,9 +116,13 @@ class AnalyticsService {
         scrollDepth
       } = data;
 
+      // Get consistent user ID that matches like functionality
+      const consistentUserId = getUserIdentifier(req);
+
       console.log('Recording page view with data:', {
         postId, url: url?.substring(0, 100) + '...', title, 
         visitorId: data.visitorId, sessionId, 
+        consistentUserId: consistentUserId.slice(0, 20) + '...',
         ipAddress: ipAddress?.substring(0, 10) + '...',
         environment: process.env.NODE_ENV
       });
@@ -163,12 +168,22 @@ class AnalyticsService {
         throw new Error('URL too long for database storage');
       }
 
-      // Check for duplicate page views - Extended logic for same session/visitor
+      // Check for duplicate page views using consistent user identification
+      // This ensures page view deduplication works the same way as like functionality
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+      
       const recentPageView = await PageView.findOne({
         where: {
           [Op.or]: [
-            // Same visitor, same URL within 5 minutes (prevents rapid refreshes)
+            // Same consistent user ID, same URL within 5 minutes (primary check)
+            {
+              userId: consistentUserId,
+              url,
+              viewDate: {
+                [Op.gte]: fiveMinutesAgo
+              }
+            },
+            // Fallback: Same visitor ID for backward compatibility
             {
               visitorId,
               url,
@@ -192,15 +207,17 @@ class AnalyticsService {
       if (recentPageView) {
         const timeSinceLastView = Date.now() - recentPageView.viewDate.getTime();
         console.log('Skipping duplicate page view within 5 minutes:', {
+          consistentUserId: consistentUserId.slice(0, 20) + '...',
           visitorId,
           sessionId,
           url: url.substring(0, 50) + '...',
           timeSinceLastView: Math.round(timeSinceLastView / 1000) + 's'
         });
         
-        // Update the existing page view's timestamp to show recent activity
+        // Update the existing page view's timestamp and user ID to show recent activity
         await recentPageView.update({
           viewDate: new Date(),
+          userId: consistentUserId, // Ensure consistent user ID is stored
           timeOnPage: timeOnPage || recentPageView.timeOnPage,
           scrollDepth: scrollDepth || recentPageView.scrollDepth
         });
@@ -208,14 +225,14 @@ class AnalyticsService {
         return recentPageView; // Return the updated page view instead of creating a duplicate
       }
 
-      // Create page view record
+      // Create page view record with consistent user identification
       const pageView = await PageView.create({
         postId,
         url,
         title: title ? this.truncateString(title, 255) : null,
         visitorId,
         sessionId,
-        userId,
+        userId: consistentUserId, // Store consistent user ID instead of basic userId
         ipAddress,
         userAgent: userAgent ? this.truncateString(userAgent, 1000) : null,
         browser: deviceInfo.browser,
@@ -231,7 +248,11 @@ class AnalyticsService {
         isBot
       });
 
-      console.log('Successfully created page view with ID:', pageView.id);
+      console.log('Successfully created page view with consistent user ID:', {
+        pageViewId: pageView.id,
+        consistentUserId: consistentUserId.slice(0, 20) + '...',
+        visitorId: visitorId.slice(0, 10) + '...'
+      });
 
       // Update or create visitor record
       await this.updateVisitor(visitorId, {

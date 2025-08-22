@@ -3,6 +3,7 @@ import auth from '../middleware/auth.js';
 import requireAuthor from '../middleware/author.js';
 import Post from '../models/Post.js';
 import { clearPostsCache } from '../controllers/postController.js';
+import { getUserIdentifier, hasUserLiked, getUserIdentificationDebug } from '../utils/userIdentification.js';
 
 const router = express.Router();
 
@@ -54,33 +55,11 @@ router.post('/:id/toggle-like', async (req, res) => {
     // Update rate limit cache
     rateLimitCache.set(rateLimitKey, now);
     
-    // For anonymous users, create a more robust identifier
-    // Use combination of IP, User-Agent, and other headers for better uniqueness in production
-    let userId;
-    if (req.user) {
-      userId = req.user.id;
-    } else {
-      // Get real client IP (handles proxy situations)
-      const clientIP = req.ip || 
-                      req.connection.remoteAddress || 
-                      req.socket.remoteAddress ||
-                      (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
-                      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                      req.headers['x-real-ip'] ||
-                      'unknown';
-      
-      const userAgent = req.get('User-Agent')?.slice(0, 100) || 'unknown';
-      const acceptLanguage = req.get('Accept-Language')?.slice(0, 20) || '';
-      
-      // Create a more unique identifier for anonymous users
-      userId = `anon_${clientIP}_${Buffer.from(userAgent + acceptLanguage).toString('base64').slice(0, 20)}`;
-      
-      console.log('🔍 Anonymous user identification:', {
-        clientIP,
-        userAgent: userAgent.slice(0, 30) + '...',
-        generatedId: userId.slice(0, 30) + '...'
-      });
-    }
+    // Get consistent user identifier using shared utility
+    const userId = getUserIdentifier(req);
+    const debugInfo = getUserIdentificationDebug(req);
+    
+    console.log('🔍 User identification:', debugInfo);
     
     // Ensure likedBy is an array
     let likedBy = post.likedBy || [];
@@ -90,13 +69,14 @@ router.post('/:id/toggle-like', async (req, res) => {
     
     console.log('🔍 Like toggle debug:', {
       postId: req.params.id,
-      userId: userId.slice(0, 30) + '...', // Truncate for security
-      isAuthenticated: !!req.user,
+      userId: debugInfo.userId,
+      isAuthenticated: debugInfo.isAuthenticated,
       currentLikes: post.likes,
       currentLikedBy: likedBy.length + ' users'
     });
     
-    const hasLiked = likedBy.some(id => id.toString() === userId.toString());
+    // Use shared utility to check if user has liked
+    const hasLiked = hasUserLiked(likedBy, req);
     
     console.log('🔍 Has liked check:', {
       hasLiked,
