@@ -86,16 +86,38 @@ connectDB().then(async () => {
   // Debug CORS configuration
   const allowedOrigins = getAllowedOrigins();
   console.log('🔧 CORS Configuration:');
-  console.log('Allowed Origins:', allowedOrigins);
-  console.log('Node Environment:', process.env.NODE_ENV);
+  console.log('📋 Allowed Origins:', allowedOrigins);
+  console.log('🌍 Node Environment:', process.env.NODE_ENV);
+  console.log('🔑 ALLOWED_ORIGINS env:', process.env.ALLOWED_ORIGINS);
 
   // Configure CORS with centralized settings
   const corsOptions = createCorsOptions();
 
+  // Enhanced CORS handling for production issues
+  app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin) {
+      console.log(`🌐 Request from origin: ${origin} to ${req.method} ${req.path}`);
+    }
+    next();
+  });
+
   app.use(cors(corsOptions));
 
-  // Add explicit preflight handling
-  app.options('*', cors(corsOptions));
+  // Enhanced preflight handling with detailed logging
+  app.options('*', (req, res) => {
+    const origin = req.get('origin');
+    console.log(`🔍 OPTIONS request from ${origin} for ${req.get('access-control-request-method')} ${req.path}`);
+    
+    cors(corsOptions)(req, res, (err) => {
+      if (err) {
+        console.log('❌ CORS preflight failed:', err.message);
+        return res.status(403).json({ error: 'CORS preflight failed', origin });
+      }
+      console.log('✅ CORS preflight passed for origin:', origin);
+      res.status(200).end();
+    });
+  });
 
   // RESOURCE OPTIMIZATION: Reduced payload limits to save memory (2MB vs 10MB)
   app.use(express.json({ limit: '2mb' }));

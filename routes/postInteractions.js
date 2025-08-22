@@ -6,6 +6,19 @@ import { clearPostsCache } from '../controllers/postController.js';
 
 const router = express.Router();
 
+// In-memory cache for rate limiting
+const rateLimitCache = new Map();
+
+// Clean up old entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of rateLimitCache.entries()) {
+    if (now - timestamp > 60000) { // Remove entries older than 1 minute
+      rateLimitCache.delete(key);
+    }
+  }
+}, 300000);
+
 // Toggle like/unlike a post
 router.post('/:id/toggle-like', async (req, res) => {
   try {
@@ -22,6 +35,24 @@ router.post('/:id/toggle-like', async (req, res) => {
     
     console.log('🔍 Post found:', post ? `${post.title} (likes: ${post.likes})` : 'null');
     if (!post) return res.status(404).json({ error: 'Post not found' });
+    
+    // Rate limiting: Prevent rapid-fire requests
+    const now = Date.now();
+    const rateLimitKey = `${req.params.id}_${req.ip}_${req.get('User-Agent')?.slice(0, 50)}`;
+    const lastRequest = rateLimitCache.get(rateLimitKey) || 0;
+    const timeSinceLastRequest = now - lastRequest;
+    
+    if (timeSinceLastRequest < 1000) { // 1 second minimum between requests
+      console.log('🚫 Rate limited: Too many requests too quickly');
+      return res.status(429).json({ 
+        error: 'Rate limited. Please wait before trying again.',
+        likes: post.likes,
+        userLiked: false
+      });
+    }
+    
+    // Update rate limit cache
+    rateLimitCache.set(rateLimitKey, now);
     
     // For anonymous users, create a more robust identifier
     // Use combination of IP, User-Agent, and other headers for better uniqueness in production
@@ -67,47 +98,50 @@ router.post('/:id/toggle-like', async (req, res) => {
     
     const hasLiked = likedBy.some(id => id.toString() === userId.toString());
     
-    console.log('🔍 Has liked:', hasLiked);
+    console.log('🔍 Has liked check:', {
+      hasLiked,
+      userId: userId.toString().slice(0, 20) + '...',
+      likedByArray: likedBy.map(id => id.toString().slice(0, 20) + '...'),
+      exactMatch: likedBy.find(id => id.toString() === userId.toString())
+    });
+    
+    let newLikes, newLikedBy;
     
     if (hasLiked) {
       // Unlike
       console.log('🔄 Unlike operation');
-      post.likes = Math.max(0, (post.likes || 0) - 1);
-      post.likedBy = likedBy.filter(id => id.toString() !== userId.toString());
+      newLikes = Math.max(0, (post.likes || 0) - 1);
+      newLikedBy = likedBy.filter(id => id.toString() !== userId.toString());
     } else {
       // Like
       console.log('🔄 Like operation');
-      post.likes = (post.likes || 0) + 1;
-      post.likedBy = [...likedBy, userId];
+      newLikes = (post.likes || 0) + 1;
+      newLikedBy = [...likedBy, userId];
     }
     
-    console.log('🔍 After operation:', {
-      newLikes: post.likes,
-      newLikedBy: post.likedBy.length + ' users'
+    // Clean up any invalid entries in likedBy array (optional maintenance)
+    newLikedBy = newLikedBy.filter(id => id && id.toString().length > 0);
+    
+    console.log('🔍 Before save:', {
+      oldLikes: post.likes,
+      newLikes,
+      oldLikedBy: post.likedBy?.length || 0,
+      newLikedBy: newLikedBy.length
     });
     
-    // Clean up any invalid entries in likedBy array (optional maintenance)
-    post.likedBy = post.likedBy.filter(id => id && id.toString().length > 0);
+    // Update the post with new values
+    post.likes = newLikes;
+    post.likedBy = newLikedBy;
     
     await post.save();
     
     // Clear cache to ensure consistency between published posts and individual post APIs
     clearPostsCache();
     
-    // Verify the save worked by fetching the post again
-    // Use the same lookup method that worked initially
-    let savedPost;
-    if (post.postId === req.params.id) {
-      // Found by postId (Blogger ID)
-      savedPost = await Post.findOne({ where: { postId: req.params.id } });
-    } else {
-      // Found by database id
-      savedPost = await Post.findOne({ where: { id: parseInt(req.params.id) } });
-    }
-    
-    console.log('🔍 After save verification:', {
-      savedLikes: savedPost?.likes || 'not found',
-      savedLikedBy: savedPost?.likedBy || 'not found'
+    console.log('🔍 After save:', {
+      finalLikes: post.likes,
+      finalLikedBy: post.likedBy?.length || 0,
+      userLikedResult: !hasLiked
     });
     
     res.json({ 

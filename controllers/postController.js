@@ -431,8 +431,7 @@ export const getPostById = async (req, res) => {
       [Op.or]: [
         { urlSlug: identifier },
         { postId: identifier }
-      ],
-      status: 'published' // Only return published posts
+      ]
     };
     
     // Add numeric ID search if valid number
@@ -440,10 +439,12 @@ export const getPostById = async (req, res) => {
       whereClause[Op.or].push({ id: numericId });
     }
     
-    // Add hidden filter for non-authors
+    // Add status and hidden filters for non-authors
     if (!req.user || !req.user.isAuthor) {
+      whereClause.status = 'published'; // Only return published posts for non-authors
       whereClause.hidden = false;
     }
+    // Authors can access all posts regardless of status (published, draft, scheduled)
     
     console.log('🔍 Executing optimized single query');
     const post = await Post.findOne({ 

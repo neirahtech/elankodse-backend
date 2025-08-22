@@ -56,15 +56,26 @@ export const getUrls = (nodeEnv = process.env.NODE_ENV) => {
   };
 };
 
-// CORS origins for production - Updated to match ALLOWED_ORIGINS from .env
+// CORS origins for production - Updated to include all possible domains
 export const PRODUCTION_CORS_ORIGINS = [
-  PRODUCTION_URLS.FRONTEND_MAIN,                    // https://elankodse.com
-  PRODUCTION_URLS.FRONTEND_WWW,                     // https://www.elankodse.com  
-  PRODUCTION_URLS.FRONTEND_DIGITALOCEAN,            // https://digitalocean.elankodse.com
-  PRODUCTION_URLS.BACKEND_API,                      // https://api.elankodse.com
+  // Main production domains
+  'https://elankodse.com',                          // Main domain
+  'https://www.elankodse.com',                      // WWW domain
   'https://test.elankodse.com',                     // Test/staging environment
-  'https://elankodse-backend.onrender.com',         // Legacy Render.com URL
-  'http://localhost:8085'                           // Local backend for mixed environments
+  
+  // Backend domains
+  'https://elankodse-backend.onrender.com',         // Current Render backend
+  'https://api.elankodse.com',                      // Future API domain
+  
+  // Additional possible domains
+  'https://digitalocean.elankodse.com',             // DigitalOcean deployment
+  'https://app.elankodse.com',                      // App subdomain
+  'https://staging.elankodse.com',                  // Staging subdomain
+  
+  // Local development for mixed environments
+  'http://localhost:8085',                          // Local backend
+  'http://localhost:5173',                          // Local frontend (Vite)
+  'http://localhost:3000'                           // Local frontend (alternative)
 ];
 
 // Development CORS origins
@@ -79,6 +90,22 @@ export const DEVELOPMENT_CORS_ORIGINS = [
 // Get appropriate CORS origins based on environment
 export const getCorsOrigins = (nodeEnv = process.env.NODE_ENV) => {
   const isProduction = nodeEnv === 'production';
+  
+  // PRODUCTION FIX: If no ALLOWED_ORIGINS env var, use comprehensive list
+  if (isProduction && !process.env.ALLOWED_ORIGINS) {
+    console.log('⚠️ Production mode: No ALLOWED_ORIGINS env var found, using comprehensive CORS list');
+    return [
+      'https://elankodse.com',
+      'https://www.elankodse.com',
+      'https://test.elankodse.com',
+      'https://app.elankodse.com',
+      'https://staging.elankodse.com',
+      'https://digitalocean.elankodse.com',
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:8085'
+    ];
+  }
   
   // If ALLOWED_ORIGINS is set in env, use that
   if (process.env.ALLOWED_ORIGINS) {
